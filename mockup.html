@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wash Point — Mockup</title>
+<style>
+  :root{
+    --ink:#0E2430;
+    --ink-soft:#3D5866;
+    --paper:#F4F7F6;
+    --panel:#FFFFFF;
+    --line:#DCE4E2;
+    --primary:#1C6E8C;
+    --primary-deep:#124F63;
+    --amber:#E8A33D;
+    --amber-deep:#C9861F;
+    --success:#3C9D6B;
+    --radius:14px;
+    --shadow: 0 1px 2px rgba(14,36,48,.06), 0 8px 24px rgba(14,36,48,.08);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background: linear-gradient(180deg, #EAF1EF 0%, #F4F7F6 340px);
+    color:var(--ink);
+    padding: 28px 16px 60px;
+    min-height:100vh;
+  }
+  h1,h2,h3{
+    font-family: 'Georgia', 'Iowan Old Style', serif;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .toolbar{
+    max-width: 1200px;
+    margin: 0 auto 22px;
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .brandmark{
+    display:flex; align-items:center; gap:10px;
+  }
+  .brandmark .drop{
+    width:26px;height:26px;border-radius: 60% 60% 60% 0% / 60% 60% 40% 40%;
+    background: linear-gradient(160deg, var(--primary), var(--primary-deep));
+    transform: rotate(45deg);
+  }
+  .brandmark span{
+    font-family:'Georgia',serif; font-size:19px; font-weight:600; letter-spacing:-0.01em;
+  }
+  .controls{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .seg{
+    display:flex; background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:3px;
+    box-shadow: var(--shadow);
+  }
+  .seg button{
+    border:none; background:transparent; padding:7px 16px; border-radius:999px; cursor:pointer;
+    font-size:13px; font-weight:600; color:var(--ink-soft); transition: all .18s ease;
+  }
+  .seg button.active{ background:var(--ink); color:#fff; }
+  .screentabs{
+    display:flex; gap:6px; flex-wrap:wrap;
+  }
+  .screentabs button{
+    border:1px solid var(--line); background:var(--panel); padding:7px 14px; border-radius:10px;
+    font-size:13px; font-weight:600; color:var(--ink-soft); cursor:pointer; transition: all .18s ease;
+  }
+  .screentabs button.active{ background:var(--primary); border-color:var(--primary); color:#fff; }
+
+  .stage{
+    max-width:1200px; margin:0 auto;
+    display:flex; justify-content:center;
+  }
+  .device{
+    background:var(--panel);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    border:1px solid var(--line);
+    overflow:hidden;
+    width: 100%;
+    max-width: 420px;
+    transition: max-width .32s cubic-bezier(.2,.8,.2,1);
+  }
+  .device.desktop{ max-width: 1080px; }
+  .device-bar{
+    height:26px; background:var(--paper); border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:6px; padding:0 12px;
+  }
+  .device-bar i{ width:8px;height:8px;border-radius:50%; background:#CBD5D3; display:inline-block; }
+  .screen{ padding: 22px 20px 26px; min-height: 560px; }
+  .device.desktop .screen{ padding: 34px 44px 46px; }
+
+  .eyebrow{
+    font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--primary);
+    font-weight:700; margin-bottom:6px;
+  }
+  .lead{ color:var(--ink-soft); font-size:14px; line-height:1.5; margin-top:8px; }
+
+  .field{ margin-top:18px; }
+  .field label{ display:block; font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; }
+  .field input{
+    width:100%; border:1px solid var(--line); border-radius:10px; padding:12px 13px;
+    font-size:15px; background:var(--paper); color:var(--ink); font-family:inherit;
+  }
+  .otp-row{ display:flex; gap:8px; margin-top:18px; }
+  .otp-row input{ width:44px; text-align:center; padding:12px 0; }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    background: var(--ink); color:#fff; border:none; border-radius:10px;
+    padding:13px 18px; font-size:14.5px; font-weight:700; cursor:pointer; width:100%;
+    margin-top: 22px; font-family:inherit; transition: transform .12s ease, opacity .12s ease;
+  }
+  .btn:active{ transform: scale(0.98); }
+  .btn.amber{ background: linear-gradient(160deg, var(--amber), var(--amber-deep)); color:#2B1B02; }
+  .btn.ghost{ background:transparent; color:var(--primary); border:1px solid var(--primary); }
+  .btn.small{ width:auto; padding:9px 14px; margin-top:0; }
+
+  .service-grid{
+    display:grid; grid-template-columns: 1fr; gap:12px; margin-top:16px;
+  }
+  .device.desktop .service-grid{ grid-template-columns: repeat(3, 1fr); }
+  .svc-card{
+    border:1px solid var(--line); border-radius: var(--radius); padding:16px;
+    cursor:pointer; transition: all .15s ease; background:var(--paper); position:relative;
+  }
+  .svc-card:hover{ border-color:var(--primary); }
+  .svc-card.selected{ border-color:var(--primary); background: #EAF3F6; box-shadow: 0 0 0 3px rgba(28,110,140,.12); }
+  .svc-card .name{ font-weight:700; font-size:15px; }
+  .svc-card .meta{ display:flex; justify-content:space-between; margin-top:10px; font-size:13px; color:var(--ink-soft); }
+  .svc-card .price{ font-weight:700; color:var(--ink); }
+
+  .date-row{ display:flex; gap:8px; overflow-x:auto; margin-top:14px; padding-bottom:4px; }
+  .date-chip{
+    flex: 0 0 auto; border:1px solid var(--line); border-radius:12px; padding:10px 14px;
+    text-align:center; cursor:pointer; background:var(--paper); min-width:56px;
+  }
+  .date-chip .d{ font-size:11px; color:var(--ink-soft); text-transform:uppercase; }
+  .date-chip .n{ font-size:16px; font-weight:700; margin-top:2px; }
+  .date-chip.selected{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  .date-chip.selected .d{ color:#CBD5D3; }
+
+  .slot-wrap{ margin-top:18px; }
+  .device.desktop .slot-wrap{ display:grid; grid-template-columns: 2fr 1fr; gap:28px; align-items:start; }
+  .slot-grid{ display:grid; grid-template-columns: repeat(3,1fr); gap:8px; margin-top:10px; }
+  .device.desktop .slot-grid{ grid-template-columns: repeat(4,1fr); }
+  .slot{
+    border:1px solid var(--line); border-radius:9px; padding:9px 4px; text-align:center;
+    font-size:13px; font-weight:600; cursor:pointer; background:var(--paper); color:var(--ink-soft);
+  }
+  .slot.full{ opacity:.35; text-decoration: line-through; cursor:not-allowed; }
+  .slot.selected{ background:var(--primary); color:#fff; border-color:var(--primary); }
+
+  .summary-card{
+    border:1px solid var(--line); border-radius:var(--radius); padding:18px; background:var(--paper); margin-top:18px;
+  }
+  .device.desktop .summary-card{ margin-top:0; position:sticky; top:0; }
+  .summary-card .row{ display:flex; justify-content:space-between; font-size:13px; padding:7px 0; color:var(--ink-soft); border-bottom:1px dashed var(--line); }
+  .summary-card .row:last-child{ border-bottom:none; }
+  .summary-card .row b{ color:var(--ink); }
+  .summary-card .total{ display:flex; justify-content:space-between; margin-top:10px; font-size:16px; font-weight:700; }
+
+  .confirm-badge{
+    width:52px;height:52px;border-radius:50%; background: var(--success); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:26px; margin: 6px 0 14px;
+  }
+  .ref{
+    font-family: 'SF Mono', 'Menlo', monospace; background:var(--paper); border:1px dashed var(--line);
+    border-radius:9px; padding:10px 14px; font-size:13px; letter-spacing:.04em; margin-top:14px;
+  }
+
+  .hist-list{ margin-top:16px; display:flex; flex-direction:column; gap:10px; }
+  .device.desktop .hist-list{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  .hist-item{
+    border:1px solid var(--line); border-radius:12px; padding:14px; background:var(--paper);
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+  }
+  .hist-item .l .svc{ font-weight:700; font-size:14px; }
+  .hist-item .l .date{ font-size:12px; color:var(--ink-soft); margin-top:3px; }
+  .hist-item .r{ text-align:right; }
+  .hist-item .r .amt{ font-weight:700; font-size:14px; }
+  .status-pill{
+    display:inline-block; font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:999px;
+    background:#E4F3EA; color:var(--success); margin-top:4px;
+  }
+
+  .navbar{
+    display:flex; justify-content:space-around; border-top:1px solid var(--line); margin: 24px -20px -26px; padding: 12px 0;
+    background:var(--paper);
+  }
+  .device.desktop .navbar{ display:none; }
+  .navbar .item{ font-size:11px; font-weight:600; color:var(--ink-soft); text-align:center; }
+  .navbar .item.active{ color:var(--primary); }
+  .navbar .dot{ width:6px;height:6px;border-radius:50%; background:currentColor; margin:0 auto 5px; }
+
+  .desktop-topnav{
+    display:none; justify-content:space-between; align-items:center; margin-bottom: 28px;
+    padding-bottom:18px; border-bottom:1px solid var(--line);
+  }
+  .device.desktop .desktop-topnav{ display:flex; }
+  .desktop-topnav .links{ display:flex; gap:22px; font-size:13px; font-weight:600; color:var(--ink-soft); }
+  .desktop-topnav .links .active{ color:var(--primary); }
+
+  .note{
+    max-width:1200px; margin: 22px auto 0; text-align:center; color:var(--ink-soft); font-size:12.5px;
+  }
+
+  /* staff console */
+  .bay-board{ display:grid; grid-template-columns:1fr; gap:14px; margin-top:16px; }
+  .device.desktop .bay-board{ grid-template-columns: repeat(4,1fr); }
+  .bay-col{ border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+  .bay-col .head{ background:var(--ink); color:#fff; padding:10px 12px; font-size:13px; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
+  .bay-col .head .tag{ font-size:10px; font-weight:700; padding:2px 7px; border-radius:999px; background:rgba(255,255,255,.18); }
+  .bay-col .head .tag.off{ background:#B4432F; }
+  .bay-slot{ padding:10px 12px; border-bottom:1px solid var(--line); font-size:12.5px; background:var(--panel); }
+  .bay-slot:last-child{ border-bottom:none; }
+  .bay-slot .t{ font-weight:700; color:var(--ink-soft); font-size:11px; }
+  .bay-slot .c{ font-weight:700; margin-top:2px; }
+  .bay-slot .s{ margin-top:2px; }
+  .bay-slot.empty{ color:var(--ink-soft); background:var(--paper); font-style:italic; }
+  .bay-slot.progress{ background:#FFF6E8; border-left:3px solid var(--amber); }
+  .bay-slot.done{ background:#EEF7F1; border-left:3px solid var(--success); }
+  .mini-btns{ display:flex; gap:6px; margin-top:6px; }
+  .mini-btn{ font-size:10.5px; font-weight:700; padding:4px 8px; border-radius:6px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+
+  .settings-block{ border:1px solid var(--line); border-radius:var(--radius); padding:18px; margin-top:16px; background:var(--paper); }
+  .settings-block h3{ font-family:'Inter',sans-serif; font-size:14px; }
+  .settings-row{ display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:14px; flex-wrap:wrap; }
+  .settings-row .lbl{ font-size:13px; font-weight:600; }
+  .settings-row .sub{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .stepper{ display:flex; align-items:center; gap:10px; }
+  .stepper button{ width:28px;height:28px;border-radius:8px;border:1px solid var(--line); background:#fff; font-weight:700; cursor:pointer; }
+  .stepper .val{ font-weight:700; min-width:60px; text-align:center; font-size:14px; }
+  .toggle{ width:38px;height:22px; border-radius:999px; background:var(--primary); position:relative; cursor:pointer; }
+  .toggle::after{ content:''; position:absolute; width:16px;height:16px; border-radius:50%; background:#fff; top:3px; right:3px; }
+  .toggle.off{ background:#CBD5D3; }
+  .toggle.off::after{ left:3px; right:auto; }
+  .blackout-list{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .blackout-chip{ font-size:12px; font-weight:600; background:#fff; border:1px solid var(--line); border-radius:8px; padding:6px 10px; display:flex; align-items:center; gap:8px; }
+  .blackout-chip .x{ color:var(--ink-soft); cursor:pointer; font-weight:700; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="brandmark"><div class="drop"></div><span>Wash Point</span></div>
+  <div class="controls">
+    <div class="seg" id="modetoggle">
+      <button data-mode="customer" class="active">Customer App</button>
+      <button data-mode="staff">Staff Console</button>
+    </div>
+    <div class="screentabs" id="screentabs"></div>
+    <div class="seg" id="viewtoggle">
+      <button data-view="mobile" class="active">Mobile</button>
+      <button data-view="desktop">Desktop</button>
+    </div>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="device" id="device">
+    <div class="device-bar"><i></i><i></i><i></i></div>
+    <div class="screen" id="screen"></div>
+  </div>
+</div>
+
+<div class="note">Toggle Mobile / Desktop to see the same screen reflow — stacked single column on mobile, multi-column with a sticky summary on desktop.</div>
+
+<script>
+const modeScreens = {
+  customer: ['login','services','slots','confirm','history'],
+  staff: ['board','settings']
+};
+const labels = {login:'Login', services:'Services', slots:'Book Slot', confirm:'Confirm', history:'Wash History',
+  board:'Bay Board', settings:'Booking Settings'};
+let mode = 'customer';
+let current = 'services';
+let view = 'mobile';
+
+const tabsEl = document.getElementById('screentabs');
+function buildTabs(){
+  tabsEl.innerHTML = '';
+  modeScreens[mode].forEach(s=>{
+    const b = document.createElement('button');
+    b.textContent = labels[s];
+    b.dataset.s = s;
+    if(s===current) b.classList.add('active');
+    b.onclick = ()=>{ current = s; render(); };
+    tabsEl.appendChild(b);
+  });
+}
+buildTabs();
+
+document.getElementById('modetoggle').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  mode = btn.dataset.mode;
+  document.querySelectorAll('#modetoggle button').forEach(b=>b.classList.toggle('active', b===btn));
+  current = modeScreens[mode][0];
+  // staff console defaults to desktop — it's a counter/tablet tool, not a phone flow
+  if(mode==='staff'){ view='desktop'; } else { view='mobile'; }
+  document.querySelectorAll('#viewtoggle button').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+  document.getElementById('device').classList.toggle('desktop', view==='desktop');
+  buildTabs();
+  render();
+});
+
+document.getElementById('viewtoggle').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if(!btn) return;
+  view = btn.dataset.view;
+  document.querySelectorAll('#viewtoggle button').forEach(b=>b.classList.toggle('active', b===btn));
+  document.getElementById('device').classList.toggle('desktop', view==='desktop');
+});
+
+function nav(active){
+  return `<div class="navbar">
+    <div class="item ${active==='services'?'active':''}"><div class="dot"></div>Book</div>
+    <div class="item ${active==='history'?'active':''}"><div class="dot"></div>History</div>
+    <div class="item"><div class="dot"></div>Profile</div>
+  </div>`;
+}
+function topnav(active){
+  if(mode==='staff'){
+    return `<div class="desktop-topnav">
+      <div class="brandmark" style="gap:8px"><div class="drop" style="width:18px;height:18px"></div><span style="font-size:15px">Wash Point · Staff</span></div>
+      <div class="links">
+        <span class="${active==='board'?'active':''}">Today's Board</span>
+        <span class="${active==='settings'?'active':''}">Booking Settings</span>
+        <span>Services & Pricing</span>
+        <span>Logged in: Aiman</span>
+      </div>
+    </div>`;
+  }
+  return `<div class="desktop-topnav">
+    <div class="brandmark" style="gap:8px"><div class="drop" style="width:18px;height:18px"></div><span style="font-size:15px">Wash Point</span></div>
+    <div class="links">
+      <span class="${active==='services'||active==='slots'?'active':''}">Book a Wash</span>
+      <span class="${active==='history'?'active':''}">Wash History</span>
+      <span>My Vehicles</span>
+      <span>Account</span>
+    </div>
+  </div>`;
+}
+
+const templates = {
+  login: () => `
+    ${topnav('login')}
+    <div class="eyebrow">Sign in</div>
+    <h2>Welcome back</h2>
+    <p class="lead">Enter your phone number — we'll text you a 6-digit code, no password needed.</p>
+    <div class="field"><label>Phone number</label><input value="+60 12-345 6789"/></div>
+    <button class="btn">Send code</button>
+    <div class="field" style="margin-top:26px; opacity:.7">
+      <label>Verification code</label>
+      <div class="otp-row">${'<input maxlength=1 value="•"/>'.repeat(6)}</div>
+    </div>
+    <button class="btn amber">Verify & Continue</button>
+  `,
+  services: () => `
+    ${topnav('services')}
+    <div class="eyebrow">Step 1 of 3</div>
+    <h2>Choose a wash</h2>
+    <p class="lead">Klang Valley branch · 4 bays available today</p>
+    <div class="service-grid">
+      <div class="svc-card selected"><div class="name">Basic Wash</div><div class="meta"><span>20 min</span><span class="price">RM 15</span></div></div>
+      <div class="svc-card"><div class="name">Premium Wash</div><div class="meta"><span>35 min</span><span class="price">RM 28</span></div></div>
+      <div class="svc-card"><div class="name">Full Detail</div><div class="meta"><span>90 min</span><span class="price">RM 90</span></div></div>
+    </div>
+    <button class="btn">Continue to slot picker</button>
+    ${nav('services')}
+  `,
+  slots: () => `
+    ${topnav('slots')}
+    <div class="eyebrow">Step 2 of 3</div>
+    <h2>Pick a time</h2>
+    <div class="date-row">
+      <div class="date-chip"><div class="d">Wed</div><div class="n">5</div></div>
+      <div class="date-chip selected"><div class="d">Thu</div><div class="n">6</div></div>
+      <div class="date-chip"><div class="d">Fri</div><div class="n">7</div></div>
+      <div class="date-chip"><div class="d">Sat</div><div class="n">8</div></div>
+      <div class="date-chip"><div class="d">Sun</div><div class="n">9</div></div>
+    </div>
+    <div class="slot-wrap">
+      <div>
+        <div class="lead" style="margin-top:16px">Basic Wash · 20 min — showing availability across all 4 bays</div>
+        <div class="slot-grid">
+          ${['9:00','9:20','9:40','10:00','10:20','10:40 (full)','11:00','11:20','11:40','12:00 (full)','12:20','12:40']
+            .map(t=>`<div class="slot ${t.includes('full')?'full':''} ${t==='10:20'?'selected':''}">${t.replace(' (full)','')}</div>`).join('')}
+        </div>
+      </div>
+      <div class="summary-card">
+        <div class="eyebrow" style="margin-bottom:10px">Booking Summary</div>
+        <div class="row"><span>Service</span><b>Basic Wash</b></div>
+        <div class="row"><span>Date</span><b>Thu, 6 Aug</b></div>
+        <div class="row"><span>Time</span><b>10:20 AM</b></div>
+        <div class="row"><span>Bay</span><b>Bay 2 (auto-assigned)</b></div>
+        <div class="total"><span>Total</span><span>RM 15</span></div>
+        <button class="btn">Continue</button>
+      </div>
+    </div>
+  `,
+  confirm: () => `
+    ${topnav('confirm')}
+    <div class="confirm-badge">✓</div>
+    <h2>Booking confirmed</h2>
+    <p class="lead">See you Thursday — we'll send a reminder 30 minutes before your slot.</p>
+    <div class="summary-card">
+      <div class="row"><span>Service</span><b>Basic Wash</b></div>
+      <div class="row"><span>When</span><b>Thu, 6 Aug · 10:20 AM</b></div>
+      <div class="row"><span>Bay</span><b>Bay 2</b></div>
+      <div class="row"><span>Vehicle</span><b>Myvi · WXY 1234</b></div>
+      <div class="total"><span>Total</span><span>RM 15</span></div>
+    </div>
+    <div class="ref">REF · WP-2026-08061020</div>
+    <button class="btn ghost">Add to calendar</button>
+    <button class="btn">Back to home</button>
+    ${nav('confirm')}
+  `,
+  history: () => `
+    ${topnav('history')}
+    <div class="eyebrow">Your account</div>
+    <h2>Wash history</h2>
+    <p class="lead">4 visits · member since Jan 2026</p>
+    <div class="hist-list">
+      <div class="hist-item"><div class="l"><div class="svc">Premium Wash</div><div class="date">6 Aug 2026 · Bay 2</div><span class="status-pill">Completed</span></div><div class="r"><div class="amt">RM 28</div></div></div>
+      <div class="hist-item"><div class="l"><div class="svc">Basic Wash</div><div class="date">22 Jul 2026 · Bay 1</div><span class="status-pill">Completed</span></div><div class="r"><div class="amt">RM 15</div></div></div>
+      <div class="hist-item"><div class="l"><div class="svc">Full Detail</div><div class="date">30 Jun 2026 · Bay 3</div><span class="status-pill">Completed</span></div><div class="r"><div class="amt">RM 90</div></div></div>
+      <div class="hist-item"><div class="l"><div class="svc">Basic Wash</div><div class="date">14 Jun 2026 · Bay 2</div><span class="status-pill">Completed</span></div><div class="r"><div class="amt">RM 15</div></div></div>
+    </div>
+    ${nav('history')}
+  `,
+  board: () => `
+    ${topnav('board')}
+    <div class="eyebrow">Thursday, 6 August</div>
+    <h2>Today's bay board</h2>
+    <p class="lead">4 bays · 11 bookings today · 2 slots in progress</p>
+    <div class="bay-board">
+      <div class="bay-col">
+        <div class="head">Bay 1 <span class="tag">Open</span></div>
+        <div class="bay-slot done"><div class="t">9:00 – 9:20</div><div class="c">Amir Hafiz · Basic Wash</div><div class="s">Myvi · WXY 1234</div></div>
+        <div class="bay-slot progress"><div class="t">10:20 – 10:40</div><div class="c">Siti Nabila · Basic Wash</div><div class="s">Axia · JQR 9081</div>
+          <div class="mini-btns"><button class="mini-btn">Mark done</button><button class="mini-btn">No-show</button></div></div>
+        <div class="bay-slot empty"><div class="t">11:00 – 11:20</div>Open slot</div>
+      </div>
+      <div class="bay-col">
+        <div class="head">Bay 2 <span class="tag">Open</span></div>
+        <div class="bay-slot done"><div class="t">9:20 – 9:55</div><div class="c">Wei Ling · Premium Wash</div><div class="s">Civic · VBA 4521</div></div>
+        <div class="bay-slot empty"><div class="t">10:20 – 10:40</div>Open slot</div>
+        <div class="bay-slot progress"><div class="t">10:40 – 12:10</div><div class="c">Ganesh Kumar · Full Detail</div><div class="s">CX-5 · BKL 7712</div>
+          <div class="mini-btns"><button class="mini-btn">Mark done</button><button class="mini-btn">No-show</button></div></div>
+      </div>
+      <div class="bay-col">
+        <div class="head">Bay 3 <span class="tag off">Maintenance</span></div>
+        <div class="bay-slot empty">Closed today — vacuum unit repair</div>
+      </div>
+      <div class="bay-col">
+        <div class="head">Bay 4 <span class="tag">Open</span></div>
+        <div class="bay-slot done"><div class="t">9:00 – 9:20</div><div class="c">Farah Adila · Basic Wash</div><div class="s">Saga · PMJ 3390</div></div>
+        <div class="bay-slot empty"><div class="t">10:20 – 10:40</div>Open slot</div>
+        <div class="bay-slot empty"><div class="t">10:40 – 11:00</div>Open slot</div>
+      </div>
+    </div>
+  `,
+  settings: () => `
+    ${topnav('settings')}
+    <div class="eyebrow">Configuration</div>
+    <h2>Booking window</h2>
+    <p class="lead">Controls what dates and times customers can select in the app.</p>
+
+    <div class="settings-block">
+      <h3>How far ahead can customers book?</h3>
+      <div class="settings-row">
+        <div><div class="lbl">Minimum lead time</div><div class="sub">Earliest a slot can be booked before it starts</div></div>
+        <div class="stepper"><button>–</button><div class="val">1 hour</div><button>+</button></div>
+      </div>
+      <div class="settings-row">
+        <div><div class="lbl">Maximum advance booking</div><div class="sub">Furthest date customers can book ahead</div></div>
+        <div class="stepper"><button>–</button><div class="val">14 days</div><button>+</button></div>
+      </div>
+    </div>
+
+    <div class="settings-block">
+      <h3>Operating hours</h3>
+      <div class="settings-row"><div class="lbl">Mon – Fri</div><div class="sub" style="font-weight:600;color:var(--ink)">8:00 AM – 7:00 PM</div></div>
+      <div class="settings-row"><div class="lbl">Sat – Sun</div><div class="sub" style="font-weight:600;color:var(--ink)">8:00 AM – 9:00 PM</div></div>
+    </div>
+
+    <div class="settings-block">
+      <h3>Blackout dates</h3>
+      <p class="sub" style="margin-top:2px">Dates fully closed to booking — holidays, private events</p>
+      <div class="blackout-list">
+        <div class="blackout-chip">31 Aug 2026 · Merdeka Day <span class="x">✕</span></div>
+        <div class="blackout-chip">25 Dec 2026 · Christmas <span class="x">✕</span></div>
+        <button class="mini-btn" style="padding:6px 12px">+ Add date</button>
+      </div>
+    </div>
+
+    <div class="settings-block">
+      <h3>Bay availability</h3>
+      <div class="settings-row"><div class="lbl">Bay 1</div><div class="toggle"></div></div>
+      <div class="settings-row"><div class="lbl">Bay 2</div><div class="toggle"></div></div>
+      <div class="settings-row"><div class="lbl">Bay 3 <span class="sub">— under maintenance</span></div><div class="toggle off"></div></div>
+      <div class="settings-row"><div class="lbl">Bay 4</div><div class="toggle"></div></div>
+    </div>
+
+    <button class="btn" style="max-width:220px">Save changes</button>
+  `
+};
+
+function render(){
+  document.querySelectorAll('#screentabs button').forEach(b=>b.classList.toggle('active', b.dataset.s===current));
+  document.getElementById('screen').innerHTML = templates[current]();
+}
+render();
+</script>
+</body>
+</html>
