@@ -56,6 +56,7 @@ create table appointments (
   id uuid primary key default uuid_generate_v4(),
   customer_chat_id text not null,
   customer_name text,
+  customer_phone text,
   channel text not null default 'telegram' check (channel in ('telegram','whatsapp')),
   vehicle_plate text,
   bay_id uuid not null references bays(id),

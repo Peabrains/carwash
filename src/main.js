@@ -158,14 +158,17 @@ function bayAvailability(bookings, bufferMinutes, now) {
   return { free: true, until: next ? new Date(next.scheduled_at) : null };
 }
 
-// customer_chat_id is only a real phone number for WhatsApp bookings —
-// Telegram's chat id is an opaque numeric id, not a phone number. There is
-// no email field anywhere in the schema; the booking flow never collects
-// one, so it can't be shown here without adding a capture step to the bot.
+// customer_phone is now explicitly collected and validated (Malaysian
+// mobile format) by the booking bot before it finalizes a booking, so it's
+// real data, not inferred from the channel. customer_chat_id is kept as a
+// separate technical reference (which platform/id to message back via) —
+// it is NOT a phone number for Telegram, only WhatsApp. There is still no
+// email field anywhere in the schema; the booking flow never collects one.
 function showApptModal(a) {
-  const idLabel = a.channel === 'whatsapp' ? 'Phone' : 'Telegram ID';
+  const idLabel = a.channel === 'whatsapp' ? 'WhatsApp ID' : 'Telegram ID';
   const rows = [
     ['Customer', a.customer_name || '—'],
+    ['Phone', a.customer_phone || '— (not collected)'],
     [idLabel, a.customer_chat_id],
     ['Vehicle', a.vehicle_plate || '—'],
     ['Service', a.services?.name ?? 'Wash'],
