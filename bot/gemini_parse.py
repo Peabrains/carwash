@@ -60,6 +60,15 @@ SCHEMA = {
             "like 'morning' or 'afternoon' are NOT specific enough — omit "
             "this field for those rather than guessing an exact time.",
         },
+        "wants_earliest": {
+            "type": "boolean",
+            "description": "True if the customer is asking for the next/"
+            "earliest/soonest available slot rather than naming a "
+            "specific date or time (e.g. 'next available', 'earliest "
+            "slot', 'ASAP', 'whenever's free'). This is a distinct intent "
+            "from just not having answered yet — only set it true when "
+            "they're explicitly asking to be booked into whatever's soonest.",
+        },
         "reply_text": {
             "type": "string",
             "description": "A short, friendly reply — used when asking "
@@ -81,11 +90,14 @@ PROMPT = (
     "to book, identify matched_service (must match a name from the list "
     "above exactly), and requested_date/requested_time if specific enough "
     "— resolve relative dates like 'tomorrow' or 'Friday' against today's "
-    "actual date above. If the service or a specific date/time is missing "
-    "or unclear, leave those fields out and use reply_text to ask for "
-    "exactly what's missing — don't guess. If this is a greeting or "
-    "unrelated to booking, set is_booking_request to false and reply "
-    "briefly.\n\n"
+    "actual date above. If they're asking for the next/earliest/soonest "
+    "opening instead of naming a date or time, set wants_earliest to true "
+    "and leave requested_date/requested_time out — do not guess a date for "
+    "this case. If the service or a specific date/time is missing or "
+    "unclear (and wants_earliest doesn't apply), leave those fields out "
+    "and use reply_text to ask for exactly what's missing — don't guess. "
+    "If this is a greeting or unrelated to booking, set is_booking_request "
+    "to false and reply briefly.\n\n"
     "Customer message: {message}"
 )
 

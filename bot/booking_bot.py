@@ -92,6 +92,27 @@ def normalize_my_phone(raw: str) -> str | None:
     return None
 
 
+# Lettered menu (A, B, C...) instead of relying on Gemini to phrase the
+# service list consistently every time — same idea as the numbered
+# alternative-slot picker, so a reply can be matched deterministically
+# without spending another Gemini call.
+SERVICE_LETTERS = "ABCDEFGH"
+
+
+def service_menu_text(services: list[dict]) -> str:
+    return "\n".join(
+        f"{SERVICE_LETTERS[i]}. {s['name']} — {s['duration_minutes']} min, RM{s['price_myr']}"
+        for i, s in enumerate(services)
+    )
+
+
+def match_service_letter(text: str, services: list[dict]) -> dict | None:
+    t = text.strip().upper()
+    if len(t) == 1 and t in SERVICE_LETTERS[: len(services)]:
+        return services[SERVICE_LETTERS.index(t)]
+    return None
+
+
 # ── Data access ──────────────────────────────────────────────────────
 def get_services() -> list[dict]:
     return supabase.table("services").select("*").eq("is_active", True).execute().data
@@ -316,6 +337,27 @@ def do_booking_attempt(chat_id, service: dict, date_iso: str, time_str: str) -> 
     )
 
 
+def book_earliest(chat_id, service: dict) -> None:
+    """'Next available' / 'earliest slot' / 'ASAP' — a distinct intent from
+    simply not having answered yet. Finds the single soonest open slot
+    starting from right now (reusing search_alternatives, which already
+    respects lead time, hours, buffer, breaks, closures) and proceeds
+    straight into the normal booking flow with it, rather than asking the
+    customer to name a date they explicitly said they don't have one for."""
+    settings = get_settings()
+    now = datetime.now(TZ)
+    options = search_alternatives(
+        now.date().isoformat(), now.strftime("%H:%M"), service["duration_minutes"],
+        settings, max_options=1, max_days=3, exclude_original=False,
+    )
+    if not options:
+        PENDING[chat_id] = {"stage": "collecting_details", "service": service, "date_iso": None, "time_str": None}
+        send_message(TOKEN, chat_id, f"Sorry, I couldn't find an open slot for {service['name']} in the next few days — try naming a specific date.")
+        return
+    slot = options[0]
+    do_booking_attempt(chat_id, service, slot["date"], slot["time"])
+
+
 def browse_availability(chat_id, service: dict, date_iso: str) -> None:
     """Service + date given, but no specific time — e.g. 'what's open today
     for a full detail'. Lists real open slots for that date rather than
@@ -400,6 +442,25 @@ def handle_message(msg: dict) -> None:
         return
 
     services = get_services()
+
+    # A bare menu letter while a service pick is specifically what's
+    # outstanding — resolve it directly, no Gemini call needed, same as
+    # name/phone above.
+    if pending and pending.get("stage") == "collecting_details" and not pending.get("service"):
+        letter_match = match_service_letter(text, services)
+        if letter_match:
+            date_iso, time_str = pending.get("date_iso"), pending.get("time_str")
+            if date_iso and time_str:
+                del PENDING[chat_id]
+                do_booking_attempt(chat_id, letter_match, date_iso, time_str)
+            elif date_iso and not time_str:
+                del PENDING[chat_id]
+                browse_availability(chat_id, letter_match, date_iso)
+            else:
+                pending["service"] = letter_match
+                send_message(TOKEN, chat_id, f"Got it, {letter_match['name']}! What date and time would you like?")
+            return
+
     now = datetime.now(TZ)
     today_iso = now.date().isoformat()
     weekday = now.strftime("%A")
@@ -445,6 +506,14 @@ def handle_message(msg: dict) -> None:
         send_message(TOKEN, chat_id, parsed.get("reply_text") or "Hi! Want to book a wash? Let me know which service and when.")
         return
 
+    # "Next available" / "ASAP" — can't do anything with this until the
+    # service is known, but doesn't need a date/time at all once it is.
+    if service and parsed.get("wants_earliest"):
+        if chat_id in PENDING:
+            del PENDING[chat_id]
+        book_earliest(chat_id, service)
+        return
+
     # Service + date given but no specific time ("what's open today for a
     # detail") — show real options instead of just asking "what time?"
     if service and date_iso and not time_str:
@@ -455,13 +524,20 @@ def handle_message(msg: dict) -> None:
 
     if not (service and date_iso and time_str):
         PENDING[chat_id] = {"stage": "collecting_details", "service": service, "date_iso": date_iso, "time_str": time_str}
+        # Service specifically missing -> always the same deterministic
+        # lettered menu, not Gemini's free-form phrasing, so a reply can be
+        # matched reliably (see match_service_letter above) instead of
+        # needing another LLM call to interpret "B" or "the second one".
+        if not service:
+            menu = service_menu_text(services)
+            extra = "" if (date_iso and time_str) else "\n\nLet me know your preferred date and time too, if you have one in mind."
+            send_message(TOKEN, chat_id, f"Which service would you like?\n{menu}{extra}")
+            return
         # Gemini now has the accumulated state (see _pending_context), so
         # its reply can answer a side question or ask only for what's
         # genuinely still missing — the hardcoded fallback only covers
         # the unlikely case reply_text came back empty.
         missing = []
-        if not service:
-            missing.append("which service")
         if not date_iso:
             missing.append("what date")
         if not time_str:
