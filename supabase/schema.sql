@@ -1,5 +1,9 @@
 -- Wash Point — core schema
 -- Run this in the Supabase SQL editor (or via `supabase db push`) after creating the project.
+--
+-- Customers book via Telegram/WhatsApp (not this schema's concern — the bot
+-- writes here directly using the service_role key, bypassing RLS). This PWA
+-- is staff/owner-only: bay board, settings, crew break configuration.
 
 create extension if not exists "uuid-ossp";
 
@@ -12,7 +16,7 @@ create table bays (
   created_at timestamptz not null default now()
 );
 
--- Planned or in-progress closures for a specific time window (does NOT require is_active = false)
+-- One-off planned/in-progress closures for a specific time window (does NOT require is_active = false)
 create table bay_closures (
   id uuid primary key default uuid_generate_v4(),
   bay_id uuid not null references bays(id) on delete cascade,
@@ -20,6 +24,18 @@ create table bay_closures (
   ends_at timestamptz not null,
   reason text,
   created_by uuid,                    -- staff user id
+  created_at timestamptz not null default now()
+);
+
+-- Recurring daily crew break per bay (e.g. staggered lunch, kept outside peak
+-- hours so bays don't all lose capacity at once). Applied every day — the
+-- availability check synthesizes today's window from this pattern rather
+-- than requiring a new bay_closures row to be entered daily.
+create table crew_break_schedule (
+  id uuid primary key default uuid_generate_v4(),
+  bay_id uuid not null references bays(id) on delete cascade,
+  start_time time not null,
+  duration_minutes int not null check (duration_minutes > 0),
   created_at timestamptz not null default now()
 );
 
@@ -33,29 +49,15 @@ create table services (
   created_at timestamptz not null default now()
 );
 
--- ── Customers (mirrors auth.users; Supabase Auth handles phone OTP) ────
-create table customers (
-  id uuid primary key references auth.users(id) on delete cascade,
-  phone text unique not null,
-  full_name text,
-  email text,
-  created_at timestamptz not null default now()
-);
-
-create table vehicles (
-  id uuid primary key default uuid_generate_v4(),
-  customer_id uuid not null references customers(id) on delete cascade,
-  plate_no text not null,
-  make_model text,
-  notes text,
-  created_at timestamptz not null default now()
-);
-
 -- ── Appointments ─────────────────────────────────────────────────────
+-- Customers are identified by their messaging chat_id, not a Supabase Auth
+-- account — booking happens entirely through the Telegram/WhatsApp bot.
 create table appointments (
   id uuid primary key default uuid_generate_v4(),
-  customer_id uuid not null references customers(id),
-  vehicle_id uuid references vehicles(id),
+  customer_chat_id text not null,
+  customer_name text,
+  channel text not null default 'telegram' check (channel in ('telegram','whatsapp')),
+  vehicle_plate text,
   bay_id uuid not null references bays(id),
   service_id uuid not null references services(id),
   scheduled_at timestamptz not null,
@@ -71,13 +73,14 @@ create table appointments (
 );
 
 create index idx_appointments_bay_time on appointments (bay_id, scheduled_at);
-create index idx_appointments_customer on appointments (customer_id, scheduled_at desc);
+create index idx_appointments_chat on appointments (customer_chat_id, scheduled_at desc);
 
 -- ── Booking window settings (single row, staff-editable) ───────────────
 create table booking_settings (
   id int primary key default 1,
   min_lead_minutes int not null default 60,
   max_advance_days int not null default 14,
+  buffer_minutes int not null default 15,   -- rest time after each wash before a bay can be rebooked
   weekday_open time not null default '08:00',
   weekday_close time not null default '19:00',
   weekend_open time not null default '08:00',
@@ -92,24 +95,61 @@ create table blackout_dates (
   label text
 );
 
--- ── Row Level Security ───────────────────────────────────────────────
-alter table customers enable row level security;
-alter table vehicles enable row level security;
-alter table appointments enable row level security;
-
--- customers can only see/edit their own row
-create policy "customers read own" on customers for select using (auth.uid() = id);
-create policy "customers update own" on customers for update using (auth.uid() = id);
-
--- vehicles/appointments scoped to owning customer
-create policy "vehicles read own" on vehicles for select using (
-  auth.uid() = (select customer_id from vehicles v where v.id = vehicles.id)
+-- ── Staff (owner/worker) ────────────────────────────────────────────────
+create table staff (
+  id uuid primary key references auth.users (id) on delete cascade,
+  role text not null check (role in ('owner', 'worker')),
+  name text,
+  created_at timestamptz not null default now()
 );
-create policy "vehicles crud own" on vehicles for all using (auth.uid() = customer_id);
 
-create policy "appointments read own" on appointments for select using (auth.uid() = customer_id);
-create policy "appointments insert own" on appointments for insert with check (auth.uid() = customer_id);
+-- ── Row Level Security ───────────────────────────────────────────────
+alter table bays enable row level security;
+alter table bay_closures enable row level security;
+alter table crew_break_schedule enable row level security;
+alter table services enable row level security;
+alter table appointments enable row level security;
+alter table booking_settings enable row level security;
+alter table blackout_dates enable row level security;
+alter table staff enable row level security;
 
--- Staff role: bays, services, booking_settings, blackout_dates, bay_closures, and ALL appointments
--- are managed via a `staff` custom claim/role checked through a Supabase Auth policy or service-role key
--- from a protected staff-only route — not exposed to the anon/customer client. See README for setup.
+create policy "staff can read own row" on staff for select using (id = auth.uid());
+
+-- Owner: full access to configuration tables.
+create policy "owner full access to bays" on bays for all
+  using (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'))
+  with check (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'));
+create policy "owner full access to bay_closures" on bay_closures for all
+  using (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'))
+  with check (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'));
+create policy "owner full access to crew_break_schedule" on crew_break_schedule for all
+  using (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'))
+  with check (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'));
+create policy "owner full access to services" on services for all
+  using (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'))
+  with check (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'));
+create policy "owner full access to booking_settings" on booking_settings for all
+  using (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'))
+  with check (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'));
+create policy "owner full access to blackout_dates" on blackout_dates for all
+  using (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'))
+  with check (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'));
+
+-- Bays/services are read-only reference data for workers (bay board needs bay names).
+create policy "worker can view bays" on bays for select
+  using (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'worker'));
+create policy "worker can view services" on services for select
+  using (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'worker'));
+
+-- Appointments: any staff can view (this is the "workers see incoming demand"
+-- requirement); only owner can create/edit/cancel via the PWA. The bot writes
+-- appointments separately using the service_role key, bypassing RLS.
+create policy "staff can view appointments" on appointments for select
+  using (exists (select 1 from staff s where s.id = auth.uid()));
+create policy "owner can insert appointments" on appointments for insert
+  with check (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'));
+create policy "owner can update appointments" on appointments for update
+  using (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'))
+  with check (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'));
+create policy "owner can delete appointments" on appointments for delete
+  using (exists (select 1 from staff s where s.id = auth.uid() and s.role = 'owner'));

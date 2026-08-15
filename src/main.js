@@ -1,31 +1,8 @@
 import './style.css';
-import { supabase, isConfigured } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
 const app = document.getElementById('app');
-const state = {
-  services: [],
-  selectedServiceId: null,
-  selectedDate: new Date().toISOString().slice(0, 10),
-  selectedSlot: null,
-  customer: null, // { id, phone }
-};
-
-function fmtDate(iso) {
-  const d = new Date(iso + 'T00:00:00');
-  return { d: d.toLocaleDateString(undefined, { weekday: 'short' }), n: d.getDate() };
-}
-
-function nextNDays(n) {
-  const out = [];
-  const today = new Date();
-  for (let i = 0; i < n; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    out.push(d.toISOString().slice(0, 10));
-  }
-  return out;
-}
+const state = { staff: null };
 
 // ── Shell ────────────────────────────────────────────────────────────
 function shell(navActive, wide, innerHTML) {
@@ -37,168 +14,72 @@ function shell(navActive, wide, innerHTML) {
       <div class="screen">${innerHTML}</div>
       ${wide ? '' : `
       <div class="navbar">
-        <div class="item ${navActive==='book'?'active':''}" data-nav="#/services">Book</div>
-        <div class="item ${navActive==='history'?'active':''}" data-nav="#/history">History</div>
-        <div class="item" data-nav="#/login">Account</div>
+        <div class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</div>
+        <div class="item ${navActive==='settings'?'active':''}" data-nav="#/staff/settings">Settings</div>
+        <div class="item" data-signout="1">Sign out</div>
       </div>`}
     </div>`;
 }
 
-// ── Pages ────────────────────────────────────────────────────────────
-async function pageLogin() {
-  app.innerHTML = shell('account', false, `
-    <div class="eyebrow">Sign in</div>
-    <h2>Welcome back</h2>
-    <p class="lead">Enter your phone number — we'll text you a 6-digit code.</p>
-    <div class="field"><label>Phone number</label><input id="phone" placeholder="+60 12-345 6789"/></div>
-    <button class="btn" id="sendOtp">Send code</button>
-    <div id="otpBlock" style="display:none">
-      <div class="field"><label>Verification code</label><input id="otp" placeholder="123456" maxlength="6"/></div>
-      <button class="btn amber" id="verifyOtp">Verify & Continue</button>
-    </div>
+// ── Staff auth ───────────────────────────────────────────────────────
+async function pageStaffLogin() {
+  app.innerHTML = shell('', false, `
+    <div class="eyebrow">Staff sign in</div>
+    <h2>Wash Point staff</h2>
+    <p class="lead">Enter your staff email — we'll send you a sign-in link.</p>
+    <div class="field"><label>Email</label><input id="email" placeholder="you@example.com"/></div>
+    <button class="btn" id="sendLink">Send sign-in link</button>
+    <p class="lead" id="sentMsg" style="display:none">Check your email for the sign-in link.</p>
   `);
-  document.getElementById('sendOtp').onclick = async () => {
-    const phone = document.getElementById('phone').value.trim();
-    if (!phone) return;
-    if (isConfigured) {
-      const { error } = await supabase.auth.signInWithOtp({ phone });
-      if (error) return alert(error.message);
-    }
-    document.getElementById('otpBlock').style.display = 'block';
-  };
-  document.getElementById('verifyOtp').onclick = async () => {
-    const phone = document.getElementById('phone').value.trim();
-    const token = document.getElementById('otp').value.trim();
-    if (isConfigured) {
-      const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: 'sms' });
-      if (error) return alert(error.message);
-      state.customer = { id: data.user.id, phone };
-    } else {
-      state.customer = { id: 'mock-customer', phone };
-    }
-    location.hash = '#/services';
+  document.getElementById('sendLink').onclick = async () => {
+    const email = document.getElementById('email').value.trim();
+    if (!email) return;
+    await api.sendStaffMagicLink(email);
+    document.getElementById('sentMsg').style.display = 'block';
   };
 }
 
-async function pageServices() {
-  state.services = await api.getServices();
-  if (!state.selectedServiceId) state.selectedServiceId = state.services[0]?.id;
+// Gate: resolve current staff member. No session at all -> straight to
+// login. Signed in but not on the staff list -> distinct "ask the owner"
+// screen, since redirecting back to login there would just loop forever.
+async function requireStaff() {
+  const user = await api.getAuthUser();
+  if (!user) {
+    location.hash = '#/staff/login';
+    return null;
+  }
 
-  const cards = state.services.map(s => `
-    <div class="svc-card ${s.id === state.selectedServiceId ? 'selected' : ''}" data-svc="${s.id}">
-      <div class="name">${s.name}</div>
-      <div class="meta"><span>${s.duration_minutes} min</span><span>RM ${s.price_myr}</span></div>
-    </div>`).join('');
-
-  app.innerHTML = shell('book', window.innerWidth > 900, `
-    <div class="eyebrow">Step 1 of 3</div>
-    <h2>Choose a wash</h2>
-    <p class="lead">Pick a service to see available time slots.</p>
-    <div class="service-grid">${cards}</div>
-    <button class="btn" id="next">Continue to slot picker</button>
-  `);
-  document.querySelectorAll('[data-svc]').forEach(el => el.onclick = () => {
-    state.selectedServiceId = el.dataset.svc;
-    pageServices();
-  });
-  document.getElementById('next').onclick = () => location.hash = '#/slots';
-}
-
-async function pageSlots() {
-  const dates = nextNDays(14);
-  const dateChips = dates.map(iso => {
-    const { d, n } = fmtDate(iso);
-    return `<div class="date-chip ${iso === state.selectedDate ? 'selected' : ''}" data-date="${iso}"><div>${d}</div><div>${n}</div></div>`;
-  }).join('');
-
-  const slots = await api.getAvailableSlots(state.selectedDate, state.selectedServiceId);
-  const slotEls = slots.map(s => `
-    <div class="slot ${!s.available ? 'full' : ''} ${state.selectedSlot === s.time ? 'selected' : ''}" data-time="${s.available ? s.time : ''}">${s.time}</div>
-  `).join('');
-
-  const service = state.services.find(s => s.id === state.selectedServiceId);
-
-  app.innerHTML = shell('book', window.innerWidth > 900, `
-    <div class="eyebrow">Step 2 of 3</div>
-    <h2>Pick a time</h2>
-    <div class="date-row">${dateChips}</div>
-    <p class="lead">${service?.name} · ${service?.duration_minutes} min</p>
-    <div class="slot-grid">${slotEls}</div>
-    <div class="summary-card">
-      <div class="row"><span>Service</span><b>${service?.name ?? '—'}</b></div>
-      <div class="row"><span>Date</span><b>${state.selectedDate}</b></div>
-      <div class="row"><span>Time</span><b>${state.selectedSlot ?? '—'}</b></div>
-      <div class="total"><span>Total</span><span>RM ${service?.price_myr ?? '—'}</span></div>
-    </div>
-    <button class="btn" id="next" ${state.selectedSlot ? '' : 'disabled'}>Continue</button>
-  `);
-
-  document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => {
-    state.selectedDate = el.dataset.date; state.selectedSlot = null; pageSlots();
-  });
-  document.querySelectorAll('[data-time]').forEach(el => el.onclick = () => {
-    if (!el.dataset.time) return;
-    state.selectedSlot = el.dataset.time; pageSlots();
-  });
-  document.getElementById('next').onclick = async () => {
-    if (!state.customer) { location.hash = '#/login'; return; }
-    const scheduledAtISO = `${state.selectedDate}T${state.selectedSlot}:00`;
-    const appt = await api.createAppointment({
-      customerId: state.customer.id,
-      vehicleId: null,
-      serviceId: state.selectedServiceId,
-      bayId: null,
-      scheduledAtISO
-    });
-    state.lastAppointment = appt;
-    location.hash = '#/confirm';
-  };
-}
-
-function pageConfirm() {
-  const service = state.services.find(s => s.id === state.selectedServiceId);
-  const ref = state.lastAppointment?.reference ?? '—';
-  app.innerHTML = shell('book', false, `
-    <h2>Booking confirmed</h2>
-    <p class="lead">See you ${state.selectedDate} at ${state.selectedSlot}.</p>
-    <div class="summary-card">
-      <div class="row"><span>Service</span><b>${service?.name}</b></div>
-      <div class="row"><span>When</span><b>${state.selectedDate} · ${state.selectedSlot}</b></div>
-      <div class="total"><span>Total</span><span>RM ${service?.price_myr}</span></div>
-    </div>
-    <p class="lead">Ref: ${ref}</p>
-    <button class="btn" id="home">Back to home</button>
-  `);
-  document.getElementById('home').onclick = () => location.hash = '#/services';
-}
-
-async function pageHistory() {
-  const list = state.customer ? await api.getMyAppointments(state.customer.id) : [];
-  const items = list.map(a => `
-    <div class="hist-item">
-      <div><div style="font-weight:700">${a.service_name ?? a.services?.name}</div>
-        <div class="lead">${new Date(a.scheduled_at).toLocaleDateString()} · ${a.bay_name ?? a.bays?.name ?? ''}</div>
-        <span class="status-pill">${a.status}</span></div>
-      <div style="font-weight:700">RM ${a.price_myr}</div>
-    </div>`).join('') || `<p class="lead">No visits yet — sign in to see your wash history.</p>`;
-
-  app.innerHTML = shell('history', false, `
-    <div class="eyebrow">Your account</div>
-    <h2>Wash history</h2>
-    ${items}
-  `);
+  const staff = await api.getCurrentStaff();
+  state.staff = staff;
+  if (!staff) {
+    app.innerHTML = shell('', false, `
+      <div class="eyebrow">Access</div>
+      <h2>Not on the staff list</h2>
+      <p class="lead">You're signed in, but this account hasn't been added as staff yet — ask the owner to add you.</p>
+      <button class="btn" id="signout">Sign out</button>
+    `);
+    document.getElementById('signout').onclick = async () => {
+      await api.signOutStaff();
+      location.hash = '#/staff/login';
+    };
+    return null;
+  }
+  return staff;
 }
 
 // ── Staff pages ──────────────────────────────────────────────────────
 async function pageStaffBoard() {
+  const staff = await requireStaff();
+  if (!staff) return;
+
   const bays = await api.getActiveBays();
   const cols = bays.map(b => `
     <div class="bay-col">
       <div class="head">${b.name} <span class="tag">Open</span></div>
       <div class="bay-slot">No bookings shown in scaffold — wire to appointments table.</div>
-      <button class="mini-btn" data-report="${b.id}" style="margin:10px">Report bay down</button>
+      ${staff.role === 'owner' ? `<button class="mini-btn" data-report="${b.id}" style="margin:10px">Report bay down</button>` : ''}
     </div>`).join('');
-  app.innerHTML = shell('', true, `
+  app.innerHTML = shell('board', true, `
     <div class="eyebrow">Staff</div>
     <h2>Today's bay board</h2>
     <div class="bay-board">${cols}</div>
@@ -208,11 +89,30 @@ async function pageStaffBoard() {
     alert(`Bay marked down. ${res.flagged ?? 0} booking(s) need attention.`);
     pageStaffBoard();
   });
+  wireSignOut();
 }
 
 async function pageStaffSettings() {
+  const staff = await requireStaff();
+  if (!staff) return;
+  if (staff.role !== 'owner') {
+    app.innerHTML = shell('settings', true, `<div class="eyebrow">Configuration</div><h2>Owner only</h2><p class="lead">Ask the owner to change booking settings.</p>`);
+    wireSignOut();
+    return;
+  }
+
   const s = await api.getBookingSettings();
-  app.innerHTML = shell('', true, `
+  const bays = await api.getActiveBays();
+  const breaks = await api.getCrewBreaks();
+
+  const bayOptions = bays.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+  const breakRows = breaks.map(b => `
+    <div class="settings-row">
+      <div>${b.bays?.name ?? b.bay_id} — ${b.start_time} for ${b.duration_minutes} min</div>
+      <button class="mini-btn" data-remove-break="${b.id}">Remove</button>
+    </div>`).join('') || '<p class="lead">No crew breaks scheduled yet.</p>';
+
+  app.innerHTML = shell('settings', true, `
     <div class="eyebrow">Configuration</div>
     <h2>Booking window</h2>
     <div class="settings-block">
@@ -220,32 +120,62 @@ async function pageStaffSettings() {
         <input id="lead" type="number" value="${s.min_lead_minutes}" style="width:80px"/></div>
       <div class="settings-row"><div>Maximum advance booking (days)</div>
         <input id="advance" type="number" value="${s.max_advance_days}" style="width:80px"/></div>
+      <div class="settings-row"><div>Buffer / rest time after each wash (minutes)</div>
+        <input id="buffer" type="number" value="${s.buffer_minutes}" style="width:80px"/></div>
     </div>
     <button class="btn" id="save" style="max-width:220px">Save changes</button>
+
+    <h2 style="margin-top:32px">Crew breaks</h2>
+    <p class="lead">Staggered per bay, kept outside your peak hours so bays don't all go down at once. Applies every day.</p>
+    <div class="settings-block">${breakRows}</div>
+    <div class="settings-row">
+      <select id="breakBay">${bayOptions}</select>
+      <input id="breakStart" type="time" value="14:30"/>
+      <input id="breakDuration" type="number" value="30" style="width:70px" title="minutes"/>
+      <button class="mini-btn" id="addBreak">Add</button>
+    </div>
   `);
+
   document.getElementById('save').onclick = async () => {
     await api.updateBookingSettings({
       min_lead_minutes: Number(document.getElementById('lead').value),
-      max_advance_days: Number(document.getElementById('advance').value)
+      max_advance_days: Number(document.getElementById('advance').value),
+      buffer_minutes: Number(document.getElementById('buffer').value)
     });
     alert('Saved.');
   };
+  document.getElementById('addBreak').onclick = async () => {
+    await api.setCrewBreak({
+      bayId: document.getElementById('breakBay').value,
+      startTime: document.getElementById('breakStart').value,
+      durationMinutes: Number(document.getElementById('breakDuration').value)
+    });
+    pageStaffSettings();
+  };
+  document.querySelectorAll('[data-remove-break]').forEach(el => el.onclick = async () => {
+    await api.removeCrewBreak(el.dataset.removeBreak);
+    pageStaffSettings();
+  });
+  wireSignOut();
+}
+
+function wireSignOut() {
+  document.querySelectorAll('[data-signout]').forEach(el => el.onclick = async () => {
+    await api.signOutStaff();
+    location.hash = '#/staff/login';
+  });
 }
 
 // ── Router ───────────────────────────────────────────────────────────
 const routes = {
-  '#/login': pageLogin,
-  '#/services': pageServices,
-  '#/slots': pageSlots,
-  '#/confirm': pageConfirm,
-  '#/history': pageHistory,
+  '#/staff/login': pageStaffLogin,
   '#/staff/board': pageStaffBoard,
   '#/staff/settings': pageStaffSettings,
 };
 
 function router() {
-  const hash = location.hash || '#/services';
-  (routes[hash] ?? pageServices)();
+  const hash = location.hash || '#/staff/board';
+  (routes[hash] ?? pageStaffBoard)();
 }
 window.addEventListener('hashchange', router);
 window.addEventListener('click', e => {

@@ -15,6 +15,7 @@ const MOCK_BAYS = [
 const MOCK_SETTINGS = {
   min_lead_minutes: 60,
   max_advance_days: 14,
+  buffer_minutes: 15,
   weekday_open: '08:00', weekday_close: '19:00',
   weekend_open: '08:00', weekend_close: '21:00'
 };
@@ -40,8 +41,24 @@ export async function getBookingSettings() {
   return data;
 }
 
+// Recurring daily crew break per bay, resolved to today's actual time window.
+async function getCrewBreaksForDate(dateISO, bayIds) {
+  if (!isConfigured) return [];
+  const { data, error } = await supabase
+    .from('crew_break_schedule')
+    .select('bay_id, start_time, duration_minutes')
+    .in('bay_id', bayIds);
+  if (error) throw error;
+  return data.map(b => {
+    const start = new Date(`${dateISO}T${b.start_time}`);
+    return { bay_id: b.bay_id, start, end: new Date(start.getTime() + b.duration_minutes * 60000) };
+  });
+}
+
 // Returns a flat list of { time, availableBayId } for a given date + service duration,
 // merged across all active bays — customers never pick a bay directly.
+// (Called by the Telegram/WhatsApp bot's own booking logic, and internally by
+// reportBayDown for reassignment — not by any page in this PWA anymore.)
 export async function getAvailableSlots(dateISO, serviceId) {
   if (!isConfigured) {
     // deterministic mock slots for local preview
@@ -50,6 +67,8 @@ export async function getAvailableSlots(dateISO, serviceId) {
   }
   const bays = await getActiveBays();
   const service = (await getServices()).find(s => s.id === serviceId);
+  const settings = await getBookingSettings();
+  const bufferMs = settings.buffer_minutes * 60000;
   const dayStart = new Date(`${dateISO}T00:00:00`);
   const dayEnd = new Date(`${dateISO}T23:59:59`);
 
@@ -62,8 +81,11 @@ export async function getAvailableSlots(dateISO, serviceId) {
     .in('status', ['pending', 'confirmed', 'in_progress']);
   if (error) throw error;
 
-  // naive slot generation — real implementation should also respect operating hours,
-  // blackout_dates, and bay_closures for the date in question
+  const breaks = await getCrewBreaksForDate(dateISO, bays.map(b => b.id));
+
+  // NOTE: still uses a hardcoded 9am-7pm scan window and doesn't yet respect
+  // weekday/weekend hours or blackout_dates — same simplification as before,
+  // unrelated to the buffer/crew-break work done here.
   const slots = [];
   for (let mins = 9 * 60; mins < 19 * 60; mins += 20) {
     const time = `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
@@ -71,54 +93,25 @@ export async function getAvailableSlots(dateISO, serviceId) {
     const slotEnd = new Date(slotStart.getTime() + service.duration_minutes * 60000);
 
     const freeBay = bays.find(bay => {
-      const conflicts = existing.filter(a => a.bay_id === bay.id).some(a => {
+      // Existing bookings on this bay occupy duration + buffer — the buffer
+      // is applied here (at check time, from current settings) rather than
+      // stored per-row, and only extends the far end, so back-to-back slots
+      // separated by exactly one buffer never double it up.
+      const bookingConflict = existing.filter(a => a.bay_id === bay.id).some(a => {
         const aStart = new Date(a.scheduled_at);
-        const aEnd = new Date(aStart.getTime() + a.duration_minutes * 60000);
-        return slotStart < aEnd && aStart < slotEnd;
+        const aEndWithBuffer = new Date(aStart.getTime() + a.duration_minutes * 60000 + bufferMs);
+        return slotStart < aEndWithBuffer && aStart < slotEnd;
       });
-      return !conflicts;
+      if (bookingConflict) return false;
+
+      // Crew breaks are the rest period itself, so no buffer inflation needed.
+      const breakConflict = breaks.some(b => b.bay_id === bay.id && slotStart < b.end && b.start < slotEnd);
+      return !breakConflict;
     });
 
     slots.push({ time, available: Boolean(freeBay), bayId: freeBay?.id });
   }
   return slots;
-}
-
-export async function createAppointment({ customerId, vehicleId, serviceId, bayId, scheduledAtISO }) {
-  const service = (await getServices()).find(s => s.id === serviceId);
-  const reference = `WP-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*9000+1000)}`;
-
-  if (!isConfigured) {
-    return { id: 'mock', reference, status: 'pending', payment_status: 'unpaid' };
-  }
-  const { data, error } = await supabase.from('appointments').insert({
-    customer_id: customerId,
-    vehicle_id: vehicleId,
-    bay_id: bayId,
-    service_id: serviceId,
-    scheduled_at: scheduledAtISO,
-    duration_minutes: service.duration_minutes,
-    price_myr: service.price_myr,
-    reference
-  }).select().single();
-  if (error) throw error;
-  return data;
-}
-
-export async function getMyAppointments(customerId) {
-  if (!isConfigured) {
-    return [
-      { id: 1, service_name: 'Premium Wash', scheduled_at: '2026-08-06T10:20:00', bay_name: 'Bay 2', price_myr: 28, status: 'completed' },
-      { id: 2, service_name: 'Basic Wash', scheduled_at: '2026-07-22T09:00:00', bay_name: 'Bay 1', price_myr: 15, status: 'completed' }
-    ];
-  }
-  const { data, error } = await supabase
-    .from('appointments')
-    .select('id, scheduled_at, price_myr, status, services(name), bays(name)')
-    .eq('customer_id', customerId)
-    .order('scheduled_at', { ascending: false });
-  if (error) throw error;
-  return data;
 }
 
 // ── Staff-side ───────────────────────────────────────────────────────
@@ -153,4 +146,55 @@ export async function updateBookingSettings(patch) {
   const { data, error } = await supabase.from('booking_settings').update(patch).eq('id', 1).select().single();
   if (error) throw error;
   return data;
+}
+
+export async function getCrewBreaks() {
+  if (!isConfigured) return [];
+  const { data, error } = await supabase.from('crew_break_schedule').select('*, bays(name)');
+  if (error) throw error;
+  return data;
+}
+
+export async function setCrewBreak({ bayId, startTime, durationMinutes }) {
+  if (!isConfigured) return { id: 'mock' };
+  const { data, error } = await supabase.from('crew_break_schedule')
+    .insert({ bay_id: bayId, start_time: startTime, duration_minutes: durationMinutes })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function removeCrewBreak(id) {
+  if (!isConfigured) return;
+  const { error } = await supabase.from('crew_break_schedule').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ── Staff auth ───────────────────────────────────────────────────────
+export async function sendStaffMagicLink(email) {
+  if (!isConfigured) return { mock: true };
+  const { error } = await supabase.auth.signInWithOtp({ email });
+  if (error) throw error;
+}
+
+export async function getAuthUser() {
+  if (!isConfigured) return { id: 'mock-owner' };
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}
+
+// Distinguishes "no session at all" from "signed in but not on the staff
+// list" — the two need different messages/actions in the UI.
+export async function getCurrentStaff() {
+  if (!isConfigured) return { id: 'mock-owner', role: 'owner', name: 'Mock Owner' };
+  const user = await getAuthUser();
+  if (!user) return null;
+  const { data, error } = await supabase.from('staff').select('*').eq('id', user.id).maybeSingle();
+  if (error) throw error;
+  return data; // null if authenticated but not yet added to the staff table
+}
+
+export async function signOutStaff() {
+  if (!isConfigured) return;
+  await supabase.auth.signOut();
 }
