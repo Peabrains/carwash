@@ -415,24 +415,46 @@ def handle_message(msg: dict) -> None:
         do_booking_attempt(chat_id, pending["service"], chosen["date"], chosen["time"])
         return
 
-    if not parsed.get("is_booking_request"):
+    # Accumulate across turns instead of re-asking from scratch each time —
+    # each message only needs to be parsed for what IT contains; whatever
+    # was already established earlier in this chat is carried forward and
+    # merged here in code, not re-derived by the LLM from a text summary.
+    collecting = pending if pending and pending.get("stage") == "collecting_details" else {}
+    new_service = next((s for s in services if s["name"] == parsed.get("matched_service")), None)
+    service = new_service or collecting.get("service")
+    date_iso = parsed.get("requested_date") or collecting.get("date_iso")
+    time_str = parsed.get("requested_time") or collecting.get("time_str")
+
+    if not collecting and not parsed.get("is_booking_request"):
         send_message(TOKEN, chat_id, parsed.get("reply_text") or "Hi! Want to book a wash? Let me know which service and when.")
         return
-
-    service = next((s for s in services if s["name"] == parsed.get("matched_service")), None)
-    date_iso = parsed.get("requested_date")
-    time_str = parsed.get("requested_time")
 
     # Service + date given but no specific time ("what's open today for a
     # detail") — show real options instead of just asking "what time?"
     if service and date_iso and not time_str:
+        if chat_id in PENDING:
+            del PENDING[chat_id]
         browse_availability(chat_id, service, date_iso)
         return
 
-    if not service or not date_iso or not time_str:
-        send_message(TOKEN, chat_id, parsed.get("reply_text") or "Which service would you like, and for what date and time?")
+    if not (service and date_iso and time_str):
+        PENDING[chat_id] = {"stage": "collecting_details", "service": service, "date_iso": date_iso, "time_str": time_str}
+        # Gemini now has the accumulated state (see _pending_context), so
+        # its reply can answer a side question or ask only for what's
+        # genuinely still missing — the hardcoded fallback only covers
+        # the unlikely case reply_text came back empty.
+        missing = []
+        if not service:
+            missing.append("which service")
+        if not date_iso:
+            missing.append("what date")
+        if not time_str:
+            missing.append("what time")
+        send_message(TOKEN, chat_id, parsed.get("reply_text") or f"Got it — just need to know {' and '.join(missing)}.")
         return
 
+    if chat_id in PENDING:
+        del PENDING[chat_id]
     do_booking_attempt(chat_id, service, date_iso, time_str)
 
 

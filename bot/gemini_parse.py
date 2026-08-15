@@ -95,14 +95,35 @@ def _client() -> genai.Client:
 
 
 def _pending_context(pending: dict | None) -> str:
-    if not pending or pending.get("stage") != "awaiting_slot_choice":
+    if not pending:
+        return ""
+
+    if pending.get("stage") == "collecting_details":
+        known = []
+        if pending.get("service"):
+            known.append(f"service = {pending['service']['name']}")
+        if pending.get("date_iso"):
+            known.append(f"date = {pending['date_iso']}")
+        if pending.get("time_str"):
+            known.append(f"time = {pending['time_str']}")
+        if not known:
+            return ""
+        return (
+            f"For this booking, the customer has already told you: {', '.join(known)}. "
+            "Do not ask for these again. If their message below adds a missing piece, "
+            "great. If it's a question (e.g. 'what services do you have'), answer it "
+            "directly in reply_text while keeping the already-known details in mind — "
+            "don't restart the conversation or ask something already answered.\n\n"
+        )
+
+    if pending.get("stage") != "awaiting_slot_choice":
         return ""
     options = "\n".join(
         f"{i + 1}. {opt['label']}" for i, opt in enumerate(pending["options"])
     )
     return (
         f"The customer was just offered these alternative slots for "
-        f"{pending['service']}, since their original request was full:\n"
+        f"{pending['service']['name']}, since their original request was full:\n"
         f"{options}\n"
         "Check first whether their message below is picking one of these.\n\n"
     )
