@@ -30,12 +30,23 @@ async function pageStaffLogin() {
     <div class="field"><label>Email</label><input id="email" placeholder="you@example.com"/></div>
     <button class="btn" id="sendLink">Send sign-in link</button>
     <p class="lead" id="sentMsg" style="display:none">Check your email for the sign-in link.</p>
+    <p class="lead" id="errMsg" style="display:none;color:#b3261e"></p>
   `);
   document.getElementById('sendLink').onclick = async () => {
     const email = document.getElementById('email').value.trim();
     if (!email) return;
-    await api.sendStaffMagicLink(email);
-    document.getElementById('sentMsg').style.display = 'block';
+    const errEl = document.getElementById('errMsg');
+    errEl.style.display = 'none';
+    try {
+      await api.sendStaffMagicLink(email);
+      document.getElementById('sentMsg').style.display = 'block';
+    } catch (e) {
+      const msg = e?.code === 'over_email_send_rate_limit'
+        ? "Too many sign-in emails sent recently — wait a bit and try again."
+        : (e?.message || 'Could not send sign-in link. Try again.');
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+    }
   };
 }
 

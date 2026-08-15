@@ -173,7 +173,13 @@ export async function removeCrewBreak(id) {
 // ── Staff auth ───────────────────────────────────────────────────────
 export async function sendStaffMagicLink(email) {
   if (!isConfigured) return { mock: true };
-  const { error } = await supabase.auth.signInWithOtp({ email });
+  // Explicit redirect so it always lands back on wherever the app is
+  // actually running (local dev, GitHub Pages, a future custom domain)
+  // instead of falling back to the project's default Site URL setting.
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: window.location.origin + import.meta.env.BASE_URL },
+  });
   if (error) throw error;
 }
 
