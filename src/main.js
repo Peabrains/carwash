@@ -333,6 +333,15 @@ async function pageStaffSettings() {
       <div class="settings-row"><div>Buffer / rest time after each wash (minutes)</div>
         <input id="buffer" type="number" value="${s.buffer_minutes}" style="width:80px"/></div>
     </div>
+
+    <h2 style="margin-top:32px">Operating hours</h2>
+    <p class="lead">Used by both the bay board and the booking bot to decide what counts as a bookable time.</p>
+    <div class="settings-block">
+      <div class="settings-row"><div>Weekday open</div><input id="weekdayOpen" type="time" value="${s.weekday_open.slice(0,5)}"/></div>
+      <div class="settings-row"><div>Weekday close</div><input id="weekdayClose" type="time" value="${s.weekday_close.slice(0,5)}"/></div>
+      <div class="settings-row"><div>Weekend open</div><input id="weekendOpen" type="time" value="${s.weekend_open.slice(0,5)}"/></div>
+      <div class="settings-row"><div>Weekend close</div><input id="weekendClose" type="time" value="${s.weekend_close.slice(0,5)}"/></div>
+    </div>
     <button class="btn" id="save" style="max-width:220px">Save changes</button>
 
     <h2 style="margin-top:32px">Crew breaks</h2>
@@ -350,7 +359,11 @@ async function pageStaffSettings() {
     await api.updateBookingSettings({
       min_lead_minutes: Number(document.getElementById('lead').value),
       max_advance_days: Number(document.getElementById('advance').value),
-      buffer_minutes: Number(document.getElementById('buffer').value)
+      buffer_minutes: Number(document.getElementById('buffer').value),
+      weekday_open: document.getElementById('weekdayOpen').value,
+      weekday_close: document.getElementById('weekdayClose').value,
+      weekend_open: document.getElementById('weekendOpen').value,
+      weekend_close: document.getElementById('weekendClose').value,
     });
     if (myGen !== renderGen) return;
     alert('Saved.');
