@@ -4,10 +4,18 @@ import * as api from './lib/api.js';
 const app = document.getElementById('app');
 const state = { staff: null };
 
+// Every navigation (route change, date click, settings save, etc.) bumps
+// this. Async page renders check it before touching the DOM, so a slow
+// in-flight render from a previous click can never clobber a newer one —
+// this was the actual cause of "clicking Settings/Prev/Next does nothing":
+// pageStaffBoard did two sequential awaits before rendering, and whichever
+// render finished LAST used to win, not whichever was clicked last.
+let renderGen = 0;
+
 // ── Shell ────────────────────────────────────────────────────────────
-function shell(navActive, wide, innerHTML) {
+function shell(navActive, innerHTML) {
   return `
-    <div class="app-shell ${wide ? 'wide' : ''}">
+    <div class="app-shell">
       <div class="topbar">
         <div class="brand"><div class="drop"></div>Wash Point</div>
       </div>
@@ -23,7 +31,8 @@ function shell(navActive, wide, innerHTML) {
 
 // ── Staff auth ───────────────────────────────────────────────────────
 async function pageStaffLogin() {
-  app.innerHTML = shell('', false, `
+  const myGen = ++renderGen;
+  app.innerHTML = shell('', `
     <div class="eyebrow">Staff sign in</div>
     <h2>Wash Point staff</h2>
     <div class="field"><label>Email</label><input id="email" placeholder="you@example.com"/></div>
@@ -39,9 +48,11 @@ async function pageStaffLogin() {
     errEl.style.display = 'none';
     try {
       await api.signInStaff(email, password);
+      if (myGen !== renderGen) return;
       location.hash = '#/staff/board';
       router();
     } catch (e) {
+      if (myGen !== renderGen) return;
       errEl.textContent = e?.message || 'Could not sign in. Check your email and password.';
       errEl.style.display = 'block';
     }
@@ -51,17 +62,21 @@ async function pageStaffLogin() {
 // Gate: resolve current staff member. No session at all -> straight to
 // login. Signed in but not on the staff list -> distinct "ask the owner"
 // screen, since redirecting back to login there would just loop forever.
-async function requireStaff() {
+// Takes the caller's render token and checks it after every await, so a
+// stale call (superseded by a newer click) never renders over fresher UI.
+async function requireStaff(myGen) {
   const user = await api.getAuthUser();
+  if (myGen !== renderGen) return null;
   if (!user) {
     location.hash = '#/staff/login';
     return null;
   }
 
   const staff = await api.getCurrentStaff();
+  if (myGen !== renderGen) return null;
   state.staff = staff;
   if (!staff) {
-    app.innerHTML = shell('', false, `
+    app.innerHTML = shell('', `
       <div class="eyebrow">Access</div>
       <h2>Not on the staff list</h2>
       <p class="lead">You're signed in, but this account hasn't been added as staff yet — ask the owner to add you.</p>
@@ -77,53 +92,105 @@ async function requireStaff() {
 }
 
 // ── Staff pages ──────────────────────────────────────────────────────
-function fmtTime(iso) {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function fmtTime(d) {
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function fmtDateLabel(dateISO, isToday) {
+  const d = new Date(dateISO + 'T00:00:00');
+  const label = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  return isToday ? `${label} · Today` : label;
+}
+// Local YYYY-MM-DD, not toISOString() (which is UTC and can land on the
+// wrong calendar day entirely in positive-UTC-offset zones like MYT).
+function localDateISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 function shiftDate(dateISO, days) {
   const d = new Date(dateISO + 'T00:00:00');
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return localDateISO(d);
+}
+
+// For "today" only: is this bay free right now, and until when? Busy
+// window is booking duration + buffer (same rule the booking bot itself
+// uses), so this directly answers "can I take a walk-in in this bay".
+function bayAvailability(bookings, bufferMinutes, now) {
+  const sorted = bookings
+    .filter(b => b.status !== 'completed')
+    .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+  for (const b of sorted) {
+    const start = new Date(b.scheduled_at);
+    const end = new Date(start.getTime() + (b.duration_minutes + bufferMinutes) * 60000);
+    if (now >= start && now < end) return { free: false, until: end };
+  }
+  const next = sorted.find(b => new Date(b.scheduled_at) > now);
+  return { free: true, until: next ? new Date(next.scheduled_at) : null };
 }
 
 async function pageStaffBoard(dateISO) {
-  const staff = await requireStaff();
+  const myGen = ++renderGen;
+  const staff = await requireStaff(myGen);
   if (!staff) return;
-  const date = dateISO || new Date().toISOString().slice(0, 10);
+  const date = dateISO || localDateISO(new Date());
+  const isToday = date === localDateISO(new Date());
 
-  const bays = await api.getActiveBays();
-  const appts = await api.getAppointmentsForDate(date);
+  const [bays, appts, settings] = await Promise.all([
+    api.getActiveBays(),
+    api.getAppointmentsForDate(date),
+    isToday ? api.getBookingSettings() : Promise.resolve(null),
+  ]);
+  if (myGen !== renderGen) return;
+
   const byBay = {};
   for (const a of appts) (byBay[a.bay_id] ??= []).push(a);
+  const now = new Date();
 
   const cols = bays.map(b => {
-    const rows = (byBay[b.id] || []).map(a => `
+    const bookings = byBay[b.id] || [];
+    const rows = bookings.map(a => `
       <div class="bay-slot ${a.status === 'in_progress' ? 'progress' : a.status === 'completed' ? 'done' : a.needs_attention ? 'attention' : ''}">
-        <div style="font-weight:700">${fmtTime(a.scheduled_at)} — ${a.services?.name ?? 'Wash'}</div>
+        <div style="font-weight:700">${fmtTime(new Date(a.scheduled_at))} — ${a.services?.name ?? 'Wash'}</div>
         <div>${a.customer_name || a.customer_chat_id} · ${a.channel}${a.needs_attention ? ' · needs attention' : ''}</div>
       </div>`).join('') || `<div class="bay-slot">No bookings this day.</div>`;
+
+    let tag = 'Open';
+    let tagClass = '';
+    if (isToday && settings) {
+      const avail = bayAvailability(bookings, settings.buffer_minutes, now);
+      if (avail.free) {
+        tag = avail.until ? `Free until ${fmtTime(avail.until)}` : 'Free all day';
+      } else {
+        tag = `Busy until ${fmtTime(avail.until)}`;
+        tagClass = 'busy';
+      }
+    }
+
     return `
       <div class="bay-col">
-        <div class="head">${b.name} <span class="tag">Open</span></div>
+        <div class="head"><span>${b.name}</span><span class="tag ${tagClass}">${tag}</span></div>
         ${rows}
         ${staff.role === 'owner' ? `<button class="mini-btn" data-report="${b.id}" style="margin:10px">Report bay down</button>` : ''}
       </div>`;
   }).join('');
 
-  const isToday = date === new Date().toISOString().slice(0, 10);
-  app.innerHTML = shell('board', true, `
+  app.innerHTML = shell('board', `
     <div class="eyebrow">Staff</div>
     <h2>Bay board</h2>
-    <div class="date-row">
-      <div class="date-chip" data-date="${shiftDate(date, -1)}">&larr; Prev</div>
-      <div class="date-chip selected">${date}${isToday ? ' (today)' : ''}</div>
-      <div class="date-chip" data-date="${shiftDate(date, 1)}">Next &rarr;</div>
+    <div class="date-nav">
+      <button data-date="${shiftDate(date, -1)}">&larr; Prev</button>
+      <div class="current">${fmtDateLabel(date, isToday)}</div>
+      <button data-date="${shiftDate(date, 1)}">Next &rarr;</button>
     </div>
+    ${isToday ? '<p class="lead">Tags show real-time walk-in availability, factoring in the rest buffer between washes.</p>' : ''}
     <div class="bay-board">${cols}</div>
   `);
   document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => pageStaffBoard(el.dataset.date));
   document.querySelectorAll('[data-report]').forEach(el => el.onclick = async () => {
     const res = await api.reportBayDown(el.dataset.report);
+    if (myGen !== renderGen) return;
     alert(`Bay marked down. ${res.flagged ?? 0} booking(s) need attention.`);
     pageStaffBoard(date);
   });
@@ -131,17 +198,21 @@ async function pageStaffBoard(dateISO) {
 }
 
 async function pageStaffSettings() {
-  const staff = await requireStaff();
+  const myGen = ++renderGen;
+  const staff = await requireStaff(myGen);
   if (!staff) return;
   if (staff.role !== 'owner') {
-    app.innerHTML = shell('settings', true, `<div class="eyebrow">Configuration</div><h2>Owner only</h2><p class="lead">Ask the owner to change booking settings.</p>`);
+    app.innerHTML = shell('settings', `<div class="eyebrow">Configuration</div><h2>Owner only</h2><p class="lead">Ask the owner to change booking settings.</p>`);
     wireSignOut();
     return;
   }
 
-  const s = await api.getBookingSettings();
-  const bays = await api.getActiveBays();
-  const breaks = await api.getCrewBreaks();
+  const [s, bays, breaks] = await Promise.all([
+    api.getBookingSettings(),
+    api.getActiveBays(),
+    api.getCrewBreaks(),
+  ]);
+  if (myGen !== renderGen) return;
 
   const bayOptions = bays.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
   const breakRows = breaks.map(b => `
@@ -150,7 +221,7 @@ async function pageStaffSettings() {
       <button class="mini-btn" data-remove-break="${b.id}">Remove</button>
     </div>`).join('') || '<p class="lead">No crew breaks scheduled yet.</p>';
 
-  app.innerHTML = shell('settings', true, `
+  app.innerHTML = shell('settings', `
     <div class="eyebrow">Configuration</div>
     <h2>Booking window</h2>
     <div class="settings-block">
@@ -180,6 +251,7 @@ async function pageStaffSettings() {
       max_advance_days: Number(document.getElementById('advance').value),
       buffer_minutes: Number(document.getElementById('buffer').value)
     });
+    if (myGen !== renderGen) return;
     alert('Saved.');
   };
   document.getElementById('addBreak').onclick = async () => {
@@ -188,10 +260,12 @@ async function pageStaffSettings() {
       startTime: document.getElementById('breakStart').value,
       durationMinutes: Number(document.getElementById('breakDuration').value)
     });
+    if (myGen !== renderGen) return;
     pageStaffSettings();
   };
   document.querySelectorAll('[data-remove-break]').forEach(el => el.onclick = async () => {
     await api.removeCrewBreak(el.dataset.removeBreak);
+    if (myGen !== renderGen) return;
     pageStaffSettings();
   });
   wireSignOut();
