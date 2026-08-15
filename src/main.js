@@ -126,6 +126,21 @@ function shiftDate(dateISO, days) {
   d.setDate(d.getDate() + days);
   return localDateISO(d);
 }
+function isWeekend(dateISO) {
+  const day = new Date(dateISO + 'T00:00:00').getDay();
+  return day === 0 || day === 6;
+}
+// "08:00:00" (Postgres time) -> minutes since midnight
+function timeStrToMinutes(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+function fmtHourLabel(mins) {
+  const h = Math.floor(mins / 60);
+  const suffix = h >= 12 ? 'pm' : 'am';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}${suffix}`;
+}
 
 // For "today" only: is this bay free right now, and until when? Busy
 // window is booking duration + buffer (same rule the booking bot itself
@@ -182,43 +197,69 @@ async function pageStaffBoard(dateISO) {
   const date = dateISO || localDateISO(new Date());
   const isToday = date === localDateISO(new Date());
 
-  const [bays, appts, settings] = await Promise.all([
+  const [bays, appts, settings, breaks] = await Promise.all([
     api.getActiveBays(),
     api.getAppointmentsForDate(date),
-    isToday ? api.getBookingSettings() : Promise.resolve(null),
+    api.getBookingSettings(),
+    api.getCrewBreaks(),
   ]);
   if (myGen !== renderGen) return;
 
+  const weekend = isWeekend(date);
+  const dayStart = timeStrToMinutes(weekend ? settings.weekend_open : settings.weekday_open);
+  const dayEnd = timeStrToMinutes(weekend ? settings.weekend_close : settings.weekday_close);
+  const totalMin = dayEnd - dayStart;
+
   const byBay = {};
   for (const a of appts) (byBay[a.bay_id] ??= []).push(a);
+  const breaksByBay = {};
+  for (const b of breaks) (breaksByBay[b.bay_id] ??= []).push(b);
   const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
 
-  const cols = bays.map(b => {
+  let hourLines = '';
+  const hourLabels = [];
+  for (let m = Math.ceil(dayStart / 60) * 60; m <= dayEnd; m += 60) {
+    const top = m - dayStart;
+    hourLines += `<div class="cal-gridline" style="top:${top}px"></div>`;
+    hourLabels.push(`<div class="cal-hour-label" style="top:${top}px">${fmtHourLabel(m)}</div>`);
+  }
+  const nowLine = (isToday && nowMin >= dayStart && nowMin <= dayEnd)
+    ? `<div class="cal-now-line" style="top:${nowMin - dayStart}px"></div>` : '';
+
+  const heads = bays.map(b => {
     const bookings = byBay[b.id] || [];
-    const rows = bookings.map(a => `
-      <div class="bay-slot ${a.status === 'in_progress' ? 'progress' : a.status === 'completed' ? 'done' : a.needs_attention ? 'attention' : ''}" data-appt="${a.id}">
-        <div style="font-weight:700">${fmtTime(new Date(a.scheduled_at))} — ${a.services?.name ?? 'Wash'}</div>
-        <div>${a.customer_name || a.customer_chat_id} · ${a.channel}${a.needs_attention ? ' · needs attention' : ''}</div>
-      </div>`).join('') || `<div class="bay-slot">No bookings this day.</div>`;
-
-    let tag = 'Open';
-    let tagClass = '';
-    if (isToday && settings) {
+    let tag = 'Open', tagClass = '';
+    if (isToday) {
       const avail = bayAvailability(bookings, settings.buffer_minutes, now);
-      if (avail.free) {
-        tag = avail.until ? `Free until ${fmtTime(avail.until)}` : 'Free all day';
-      } else {
-        tag = `Busy until ${fmtTime(avail.until)}`;
-        tagClass = 'busy';
-      }
+      if (avail.free) tag = avail.until ? `Free until ${fmtTime(avail.until)}` : 'Free all day';
+      else { tag = `Busy until ${fmtTime(avail.until)}`; tagClass = 'busy'; }
     }
+    return `<div class="cal-col-head"><span>${b.name}</span><span class="tag ${tagClass}">${tag}</span></div>`;
+  }).join('');
 
-    return `
-      <div class="bay-col">
-        <div class="head"><span>${b.name}</span><span class="tag ${tagClass}">${tag}</span></div>
-        ${rows}
-        ${staff.role === 'owner' ? `<button class="mini-btn" data-report="${b.id}" style="margin:10px">Report bay down</button>` : ''}
+  const tracks = bays.map(b => {
+    const bookings = byBay[b.id] || [];
+    const apptBlocks = bookings.map(a => {
+      const start = new Date(a.scheduled_at);
+      const startMin = start.getHours() * 60 + start.getMinutes();
+      const top = startMin - dayStart;
+      const height = Math.max(24, a.duration_minutes);
+      const cls = a.status === 'in_progress' ? 'progress' : a.status === 'completed' ? 'done' : a.needs_attention ? 'attention' : '';
+      return `<div class="cal-block ${cls}" style="top:${top}px;height:${height}px" data-appt="${a.id}">
+        <div class="t1">${fmtTime(start)} ${a.services?.name ?? 'Wash'}</div>
+        <div class="t2">${a.customer_name || a.customer_chat_id}</div>
       </div>`;
+    }).join('');
+    const breakBlocks = (breaksByBay[b.id] || []).map(br => {
+      const startMin = timeStrToMinutes(br.start_time);
+      const top = startMin - dayStart;
+      const height = Math.max(18, br.duration_minutes);
+      return `<div class="cal-block cal-break" style="top:${top}px;height:${height}px">
+        <div class="t1">Crew break</div>
+      </div>`;
+    }).join('');
+    return `<div class="cal-col-track">${hourLines}${breakBlocks}${apptBlocks}${isToday ? nowLine : ''}</div>`;
   }).join('');
 
   app.innerHTML = shell('board', `
@@ -229,8 +270,16 @@ async function pageStaffBoard(dateISO) {
       <div class="current">${fmtDateLabel(date, isToday)}</div>
       <button data-date="${shiftDate(date, 1)}">Next &rarr;</button>
     </div>
-    ${isToday ? '<p class="lead">Tags show real-time walk-in availability, factoring in the rest buffer between washes.</p>' : ''}
-    <div class="bay-board">${cols}</div>
+    ${isToday ? '<p class="lead">Tags show real-time walk-in availability. Gray blocks are scheduled crew breaks.</p>' : ''}
+    <div class="cal-wrap">
+      <div class="cal-grid" style="grid-template-columns:44px repeat(${bays.length},minmax(140px,1fr))">
+        <div class="cal-gutter-head"></div>
+        ${heads}
+        <div class="cal-gutter" style="height:${totalMin}px">${hourLabels.join('')}</div>
+        ${tracks}
+      </div>
+    </div>
+    ${staff.role === 'owner' ? `<div class="settings-row" style="margin-top:14px">${bays.map(b => `<button class="mini-btn" data-report="${b.id}">Report ${b.name} down</button>`).join('')}</div>` : ''}
   `);
   document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => pageStaffBoard(el.dataset.date));
   document.querySelectorAll('[data-appt]').forEach(el => el.onclick = () => {
