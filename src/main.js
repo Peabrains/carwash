@@ -35,9 +35,9 @@ function shell(navActive, innerHTML) {
       <div class="screen">${innerHTML}</div>
       ${navActive ? `
       <div class="navbar">
-        <div class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</div>
-        <div class="item ${navActive==='settings'?'active':''}" data-nav="#/staff/settings">Settings</div>
-        <div class="item" data-signout="1">Sign out</div>
+        <button type="button" class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</button>
+        <button type="button" class="item ${navActive==='settings'?'active':''}" data-nav="#/staff/settings">Settings</button>
+        <button type="button" class="item" data-signout="1">Sign out</button>
       </div>` : ''}
     </div>`;
 }
@@ -292,7 +292,7 @@ async function pageStaffBoard(dateISO) {
     alert(`Bay marked down. ${res.flagged ?? 0} booking(s) need attention.`);
     pageStaffBoard(date);
   });
-  wireSignOut();
+  wireNav();
 }
 
 async function pageStaffSettings() {
@@ -301,7 +301,7 @@ async function pageStaffSettings() {
   if (!staff) return;
   if (staff.role !== 'owner') {
     app.innerHTML = shell('settings', `<div class="eyebrow">Configuration</div><h2>Owner only</h2><p class="lead">Ask the owner to change booking settings.</p>`);
-    wireSignOut();
+    wireNav();
     return;
   }
 
@@ -366,10 +366,15 @@ async function pageStaffSettings() {
     if (myGen !== renderGen) return;
     pageStaffSettings();
   });
-  wireSignOut();
+  wireNav();
 }
 
-function wireSignOut() {
+// Direct per-element handlers, not window-level delegation — every other
+// interactive element in this app is wired this way already; the nav bar
+// was the one exception, and reports of it not responding on mobile are
+// exactly the symptom delegation-vs-direct-binding differences can cause.
+function wireNav() {
+  document.querySelectorAll('[data-nav]').forEach(el => el.onclick = () => { location.hash = el.dataset.nav; });
   document.querySelectorAll('[data-signout]').forEach(el => el.onclick = async () => {
     await api.signOutStaff();
     location.hash = '#/staff/login';
@@ -388,8 +393,4 @@ function router() {
   (routes[hash] ?? pageStaffBoard)();
 }
 window.addEventListener('hashchange', router);
-window.addEventListener('click', e => {
-  const nav = e.target.closest('[data-nav]');
-  if (nav) location.hash = nav.dataset.nav;
-});
 router();
