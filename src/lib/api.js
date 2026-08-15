@@ -171,15 +171,13 @@ export async function removeCrewBreak(id) {
 }
 
 // ── Staff auth ───────────────────────────────────────────────────────
-export async function sendStaffMagicLink(email) {
+// Email+password rather than magic link — avoids depending on email
+// delivery entirely (no rate limits, no redirect-URL config, no device
+// mismatch). Fine for a small, known staff list; revisit if self-serve
+// signup for arbitrary users is ever needed.
+export async function signInStaff(email, password) {
   if (!isConfigured) return { mock: true };
-  // Explicit redirect so it always lands back on wherever the app is
-  // actually running (local dev, GitHub Pages, a future custom domain)
-  // instead of falling back to the project's default Site URL setting.
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: window.location.origin + import.meta.env.BASE_URL },
-  });
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
 }
 

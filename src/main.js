@@ -26,25 +26,23 @@ async function pageStaffLogin() {
   app.innerHTML = shell('', false, `
     <div class="eyebrow">Staff sign in</div>
     <h2>Wash Point staff</h2>
-    <p class="lead">Enter your staff email — we'll send you a sign-in link.</p>
     <div class="field"><label>Email</label><input id="email" placeholder="you@example.com"/></div>
-    <button class="btn" id="sendLink">Send sign-in link</button>
-    <p class="lead" id="sentMsg" style="display:none">Check your email for the sign-in link.</p>
+    <div class="field"><label>Password</label><input id="password" type="password"/></div>
+    <button class="btn" id="doSignIn">Sign in</button>
     <p class="lead" id="errMsg" style="display:none;color:#b3261e"></p>
   `);
-  document.getElementById('sendLink').onclick = async () => {
+  document.getElementById('doSignIn').onclick = async () => {
     const email = document.getElementById('email').value.trim();
-    if (!email) return;
+    const password = document.getElementById('password').value;
+    if (!email || !password) return;
     const errEl = document.getElementById('errMsg');
     errEl.style.display = 'none';
     try {
-      await api.sendStaffMagicLink(email);
-      document.getElementById('sentMsg').style.display = 'block';
+      await api.signInStaff(email, password);
+      location.hash = '#/staff/board';
+      router();
     } catch (e) {
-      const msg = e?.code === 'over_email_send_rate_limit'
-        ? "Too many sign-in emails sent recently — wait a bit and try again."
-        : (e?.message || 'Could not send sign-in link. Try again.');
-      errEl.textContent = msg;
+      errEl.textContent = e?.message || 'Could not sign in. Check your email and password.';
       errEl.style.display = 'block';
     }
   };
