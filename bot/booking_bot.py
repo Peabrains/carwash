@@ -277,6 +277,11 @@ def do_booking_attempt(chat_id, service: dict, date_iso: str, time_str: str) -> 
     settings = get_settings()
     error = validate_request(date_iso, time_str, service["duration_minutes"], settings)
     if error:
+        # Keep the service — it's still valid, only this date/time was
+        # rejected. Without this the customer has to re-name the service
+        # on their very next message, which is exactly the "reiterate"
+        # complaint this fix is for.
+        PENDING[chat_id] = {"stage": "collecting_details", "service": service, "date_iso": None, "time_str": None}
         send_message(TOKEN, chat_id, error)
         return
 
@@ -294,10 +299,11 @@ def do_booking_attempt(chat_id, service: dict, date_iso: str, time_str: str) -> 
 
     options = search_alternatives(date_iso, time_str, service["duration_minutes"], settings)
     if not options:
+        PENDING[chat_id] = {"stage": "collecting_details", "service": service, "date_iso": None, "time_str": None}
         send_message(
             TOKEN, chat_id,
             f"Sorry, we're fully booked around then for {service['name']} — "
-            "try a different day, or message us directly.",
+            "try a different day or time.",
         )
         return
 
@@ -323,6 +329,7 @@ def browse_availability(chat_id, service: dict, date_iso: str) -> None:
     options = search_alternatives(date_iso, open_t, service["duration_minutes"], settings, max_days=0, exclude_original=False)
 
     if not options:
+        PENDING[chat_id] = {"stage": "collecting_details", "service": service, "date_iso": None, "time_str": None}
         send_message(
             TOKEN, chat_id,
             f"Sorry, no open slots left for {service['name']} on {fmt_date_label(date_iso)}. "
@@ -419,13 +426,22 @@ def handle_message(msg: dict) -> None:
     # each message only needs to be parsed for what IT contains; whatever
     # was already established earlier in this chat is carried forward and
     # merged here in code, not re-derived by the LLM from a text summary.
-    collecting = pending if pending and pending.get("stage") == "collecting_details" else {}
+    # Recovers from ANY pending stage, not just collecting_details — e.g. an
+    # unrelated reply ("Help") while alternatives were on offer shouldn't
+    # throw away the service that was already pinned down either.
+    known = {}
+    if pending:
+        known = {
+            "service": pending.get("service"),
+            "date_iso": pending.get("date_iso") or pending.get("date"),
+            "time_str": pending.get("time_str") or pending.get("time"),
+        }
     new_service = next((s for s in services if s["name"] == parsed.get("matched_service")), None)
-    service = new_service or collecting.get("service")
-    date_iso = parsed.get("requested_date") or collecting.get("date_iso")
-    time_str = parsed.get("requested_time") or collecting.get("time_str")
+    service = new_service or known.get("service")
+    date_iso = parsed.get("requested_date") or known.get("date_iso")
+    time_str = parsed.get("requested_time") or known.get("time_str")
 
-    if not collecting and not parsed.get("is_booking_request"):
+    if not pending and not parsed.get("is_booking_request"):
         send_message(TOKEN, chat_id, parsed.get("reply_text") or "Hi! Want to book a wash? Let me know which service and when.")
         return
 
