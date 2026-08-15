@@ -216,7 +216,7 @@ def find_available_bay(date_iso: str, time_str: str, duration: int, settings: di
     return None
 
 
-def search_alternatives(date_iso: str, time_str: str, duration: int, settings: dict, max_options: int = 3, max_days: int = 3, exclude_original: bool = True) -> list[dict]:
+def search_alternatives(date_iso: str, time_str: str, duration: int, settings: dict, max_options: int = 6, max_days: int = 3, exclude_original: bool = True) -> list[dict]:
     options = []
     start_date = date.fromisoformat(date_iso)
     start_time = _parse_time(time_str)
@@ -305,7 +305,8 @@ def do_booking_attempt(chat_id, service: dict, date_iso: str, time_str: str) -> 
     lines = "\n".join(f"{i + 1}. {o['label']}" for i, o in enumerate(options))
     send_message(
         TOKEN, chat_id,
-        f"That slot's full for {service['name']}. Here's what's open nearby:\n{lines}\nReply with the number that works.",
+        f"That slot's full for {service['name']}. Here are the next {len(options)} open slots from there:\n{lines}\n"
+        "Reply with the number that works — or if none of these suit you, just tell me a specific time and I'll check that directly.",
     )
 
 
@@ -333,7 +334,9 @@ def browse_availability(chat_id, service: dict, date_iso: str) -> None:
     lines = "\n".join(f"{i + 1}. {o['label']}" for i, o in enumerate(options))
     send_message(
         TOKEN, chat_id,
-        f"Here's what's open for {service['name']} on {fmt_date_label(date_iso)}:\n{lines}\nReply with the number that works.",
+        f"Here are the next {len(options)} open slots for {service['name']} on {fmt_date_label(date_iso)} "
+        f"(there may be more later in the day):\n{lines}\n"
+        "Reply with the number that works — or tell me a specific time and I'll check that directly.",
     )
 
 
