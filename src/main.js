@@ -12,12 +12,12 @@ function shell(navActive, wide, innerHTML) {
         <div class="brand"><div class="drop"></div>Wash Point</div>
       </div>
       <div class="screen">${innerHTML}</div>
-      ${wide ? '' : `
+      ${navActive ? `
       <div class="navbar">
         <div class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</div>
         <div class="item ${navActive==='settings'?'active':''}" data-nav="#/staff/settings">Settings</div>
         <div class="item" data-signout="1">Sign out</div>
-      </div>`}
+      </div>` : ''}
     </div>`;
 }
 
@@ -77,26 +77,55 @@ async function requireStaff() {
 }
 
 // ── Staff pages ──────────────────────────────────────────────────────
-async function pageStaffBoard() {
+function fmtTime(iso) {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function shiftDate(dateISO, days) {
+  const d = new Date(dateISO + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+async function pageStaffBoard(dateISO) {
   const staff = await requireStaff();
   if (!staff) return;
+  const date = dateISO || new Date().toISOString().slice(0, 10);
 
   const bays = await api.getActiveBays();
-  const cols = bays.map(b => `
-    <div class="bay-col">
-      <div class="head">${b.name} <span class="tag">Open</span></div>
-      <div class="bay-slot">No bookings shown in scaffold — wire to appointments table.</div>
-      ${staff.role === 'owner' ? `<button class="mini-btn" data-report="${b.id}" style="margin:10px">Report bay down</button>` : ''}
-    </div>`).join('');
+  const appts = await api.getAppointmentsForDate(date);
+  const byBay = {};
+  for (const a of appts) (byBay[a.bay_id] ??= []).push(a);
+
+  const cols = bays.map(b => {
+    const rows = (byBay[b.id] || []).map(a => `
+      <div class="bay-slot ${a.status === 'in_progress' ? 'progress' : a.status === 'completed' ? 'done' : a.needs_attention ? 'attention' : ''}">
+        <div style="font-weight:700">${fmtTime(a.scheduled_at)} — ${a.services?.name ?? 'Wash'}</div>
+        <div>${a.customer_name || a.customer_chat_id} · ${a.channel}${a.needs_attention ? ' · needs attention' : ''}</div>
+      </div>`).join('') || `<div class="bay-slot">No bookings this day.</div>`;
+    return `
+      <div class="bay-col">
+        <div class="head">${b.name} <span class="tag">Open</span></div>
+        ${rows}
+        ${staff.role === 'owner' ? `<button class="mini-btn" data-report="${b.id}" style="margin:10px">Report bay down</button>` : ''}
+      </div>`;
+  }).join('');
+
+  const isToday = date === new Date().toISOString().slice(0, 10);
   app.innerHTML = shell('board', true, `
     <div class="eyebrow">Staff</div>
-    <h2>Today's bay board</h2>
+    <h2>Bay board</h2>
+    <div class="date-row">
+      <div class="date-chip" data-date="${shiftDate(date, -1)}">&larr; Prev</div>
+      <div class="date-chip selected">${date}${isToday ? ' (today)' : ''}</div>
+      <div class="date-chip" data-date="${shiftDate(date, 1)}">Next &rarr;</div>
+    </div>
     <div class="bay-board">${cols}</div>
   `);
+  document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => pageStaffBoard(el.dataset.date));
   document.querySelectorAll('[data-report]').forEach(el => el.onclick = async () => {
     const res = await api.reportBayDown(el.dataset.report);
     alert(`Bay marked down. ${res.flagged ?? 0} booking(s) need attention.`);
-    pageStaffBoard();
+    pageStaffBoard(date);
   });
   wireSignOut();
 }

@@ -34,6 +34,24 @@ export async function getActiveBays() {
   return data;
 }
 
+// All non-cancelled bookings for a given day, across all bays, for the bay
+// board's calendar view. Joins in the bay/service names so the UI doesn't
+// need a second round-trip.
+export async function getAppointmentsForDate(dateISO) {
+  if (!isConfigured) return [];
+  const dayStart = new Date(`${dateISO}T00:00:00`);
+  const dayEnd = new Date(`${dateISO}T23:59:59`);
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('*, bays(name), services(name)')
+    .gte('scheduled_at', dayStart.toISOString())
+    .lte('scheduled_at', dayEnd.toISOString())
+    .neq('status', 'cancelled')
+    .order('scheduled_at');
+  if (error) throw error;
+  return data;
+}
+
 export async function getBookingSettings() {
   if (!isConfigured) return MOCK_SETTINGS;
   const { data, error } = await supabase.from('booking_settings').select('*').eq('id', 1).single();
