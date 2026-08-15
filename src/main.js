@@ -1,6 +1,19 @@
 import './style.css';
 import * as api from './lib/api.js';
 
+// The generated registerSW.js only calls navigator.serviceWorker.register()
+// with no update-detection at all, so a new deploy's service worker sits
+// "waiting" indefinitely and open/revisited tabs keep serving old cached
+// content — registerType: 'autoUpdate' in vite.config.js does nothing on
+// its own without this. This forces an update check and reloads once a
+// new version is actually found, so every deploy takes effect on next
+// visit instead of requiring a manual cache clear.
+if ('serviceWorker' in navigator) {
+  import('virtual:pwa-register').then(({ registerSW }) => {
+    registerSW({ immediate: true });
+  });
+}
+
 const app = document.getElementById('app');
 const state = { staff: null };
 
@@ -130,6 +143,38 @@ function bayAvailability(bookings, bufferMinutes, now) {
   return { free: true, until: next ? new Date(next.scheduled_at) : null };
 }
 
+// customer_chat_id is only a real phone number for WhatsApp bookings —
+// Telegram's chat id is an opaque numeric id, not a phone number. There is
+// no email field anywhere in the schema; the booking flow never collects
+// one, so it can't be shown here without adding a capture step to the bot.
+function showApptModal(a) {
+  const idLabel = a.channel === 'whatsapp' ? 'Phone' : 'Telegram ID';
+  const rows = [
+    ['Customer', a.customer_name || '—'],
+    [idLabel, a.customer_chat_id],
+    ['Vehicle', a.vehicle_plate || '—'],
+    ['Service', a.services?.name ?? 'Wash'],
+    ['Bay', a.bays?.name ?? '—'],
+    ['Time', fmtTime(new Date(a.scheduled_at))],
+    ['Duration', `${a.duration_minutes} min`],
+    ['Price', `RM ${a.price_myr}`],
+    ['Status', a.status.replace('_', ' ')],
+    ['Payment', a.payment_status],
+    ['Reference', a.reference],
+  ];
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card">
+      <h3>Booking details</h3>
+      ${rows.map(([k, v]) => `<div class="modal-row"><span>${k}</span><span>${v}</span></div>`).join('')}
+      <button class="btn" id="closeModal">Close</button>
+    </div>`;
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
+  document.getElementById('closeModal').onclick = () => overlay.remove();
+}
+
 async function pageStaffBoard(dateISO) {
   const myGen = ++renderGen;
   const staff = await requireStaff(myGen);
@@ -151,7 +196,7 @@ async function pageStaffBoard(dateISO) {
   const cols = bays.map(b => {
     const bookings = byBay[b.id] || [];
     const rows = bookings.map(a => `
-      <div class="bay-slot ${a.status === 'in_progress' ? 'progress' : a.status === 'completed' ? 'done' : a.needs_attention ? 'attention' : ''}">
+      <div class="bay-slot ${a.status === 'in_progress' ? 'progress' : a.status === 'completed' ? 'done' : a.needs_attention ? 'attention' : ''}" data-appt="${a.id}">
         <div style="font-weight:700">${fmtTime(new Date(a.scheduled_at))} — ${a.services?.name ?? 'Wash'}</div>
         <div>${a.customer_name || a.customer_chat_id} · ${a.channel}${a.needs_attention ? ' · needs attention' : ''}</div>
       </div>`).join('') || `<div class="bay-slot">No bookings this day.</div>`;
@@ -188,6 +233,10 @@ async function pageStaffBoard(dateISO) {
     <div class="bay-board">${cols}</div>
   `);
   document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => pageStaffBoard(el.dataset.date));
+  document.querySelectorAll('[data-appt]').forEach(el => el.onclick = () => {
+    const a = appts.find(x => x.id === el.dataset.appt);
+    if (a) showApptModal(a);
+  });
   document.querySelectorAll('[data-report]').forEach(el => el.onclick = async () => {
     const res = await api.reportBayDown(el.dataset.report);
     if (myGen !== renderGen) return;

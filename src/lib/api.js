@@ -29,7 +29,9 @@ export async function getServices() {
 
 export async function getActiveBays() {
   if (!isConfigured) return MOCK_BAYS.filter(b => b.is_active);
-  const { data, error } = await supabase.from('bays').select('*').eq('is_active', true);
+  // Without an explicit order, Postgres doesn't guarantee row order at
+  // all — this is why Bay 2 was showing above Bay 1.
+  const { data, error } = await supabase.from('bays').select('*').eq('is_active', true).order('name');
   if (error) throw error;
   return data;
 }
