@@ -9,8 +9,7 @@ const MOCK_SERVICES = [
 const MOCK_BAYS = [
   { id: 'bay1', name: 'Bay 1', is_active: true },
   { id: 'bay2', name: 'Bay 2', is_active: true },
-  { id: 'bay3', name: 'Bay 3', is_active: false },
-  { id: 'bay4', name: 'Bay 4', is_active: true }
+  { id: 'bay3', name: 'Bay 3', is_active: false }
 ];
 const MOCK_SETTINGS = {
   min_lead_minutes: 60,
