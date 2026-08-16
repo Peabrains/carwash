@@ -92,7 +92,12 @@ export async function respondToCustomer(message: string, previous: SafeBookingSt
   let text=result.object.reply;
   const selectedService=serviceFor(state.serviceName,context.services);
   const selectedSlot=state.dateIso&&state.time24h&&selectedService ? await checkAvailability(state.dateIso,state.time24h,selectedService,context.settings) : undefined;
-  if(selectedSlot&&!selectedSlot.available){
+  // Only enforce a slot result when this turn is about choosing/changing a
+  // booking slot. A stale draft must not hijack unrelated questions such as
+  // catalogue, pricing, opening hours, or cancellation requests.
+  const slotChanged = state.dateIso !== prior.dateIso || state.time24h !== prior.time24h || state.serviceName !== prior.serviceName;
+  const isSlotTurn = ["new_booking", "reschedule"].includes(result.object.intent) || slotChanged;
+  if(isSlotTurn && selectedSlot&&!selectedSlot.available){
     state.status="collecting";
     result.object.handoff=false;
     text=selectedSlot.reason==="too_far" ? "Sorry, we only accept bookings up to "+context.settings.max_advance_days+" days in advance. Please choose an earlier date." : selectedSlot.reason==="closed" ? "Sorry, we are closed on that date. Please choose another date." : selectedSlot.reason==="fully_booked" ? "Sorry, that slot is fully booked. Please choose another time or date." : selectedSlot.reason==="outside_hours" ? "That time is outside our operating hours. Please choose another time." : "I couldn't check availability right now. Please try again shortly.";
