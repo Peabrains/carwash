@@ -1,6 +1,6 @@
 import "./env.js";
 import { createClient } from "@supabase/supabase-js";
-import type { Thread } from "chat";
+import type { Channel, Thread } from "chat";
 import { Actions, Button, Card, CardText } from "chat";
 
 export type Tier1State = {
@@ -84,6 +84,11 @@ export async function startTier1(thread: Thread) {
   await thread.setState(value);
   const c = await context();
   await thread.post(menu("WashPoint — Book a wash", "Choose a service:", c.services.slice(0, 8).map(s => ({ id: "t1_service", label: s.name, value: s.id }))));
+}
+
+export async function startTier1Channel(channel: Channel) {
+  const c = await context();
+  await channel.post(menu("WashPoint — Book a wash", "Choose a service:", c.services.slice(0, 8).map(s => ({ id: "t1_service", label: s.name, value: s.id }))));
 }
 
 export async function handleTier1Action(thread: Thread, actionId: string, value?: string) {

@@ -3,7 +3,7 @@ import { Chat } from "chat";
 import { createMemoryState } from "@chat-adapter/state-memory";
 import { createPostgresState } from "@chat-adapter/state-pg";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
-import { handleTier1Action, handleTier1Text, startTier1 } from "./tier1-flow.js";
+import { handleTier1Action, handleTier1Text, startTier1, startTier1Channel } from "./tier1-flow.js";
 
 const token = process.env.TIER1_TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error("TIER1_TELEGRAM_BOT_TOKEN is required");
@@ -20,4 +20,5 @@ tier1Bot.onDirectMessage(async (thread, message) => {
   if (message.attachments?.some(attachment => attachment.type === "audio")) return thread.post("This booking bot uses fixed menus. Please type your request or use /start.");
   await handleTier1Text(thread, message.text.trim());
 });
+tier1Bot.onSlashCommand("/start", async event => { await startTier1Channel(event.channel); });
 tier1Bot.onAction(async event => { if (event.thread) await handleTier1Action(event.thread, event.actionId, event.value); });
