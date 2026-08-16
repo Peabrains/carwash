@@ -9,7 +9,7 @@ type Turn = { role: "user" | "assistant"; content: string };
 export type SafeBookingState = {
   serviceName?: string; dateIso?: string; time24h?: string;
   customerName?: string; customerPhone?: string; language?: "en" | "ms";
-  status?: "collecting" | "awaiting_confirmation" | "completed";
+  status?: "collecting" | "awaiting_confirmation" | "paused" | "completed";
   recentTurns?: Turn[]; lastActiveAt?: string;
 };
 type Service = { id: string; name: string; duration_minutes: number; price_myr: number };
