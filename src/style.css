@@ -72,6 +72,7 @@ a{color:inherit;text-decoration:none;}
 .cal-block.done{background:#EEF7F1;border-left-color:var(--success);}
 .cal-block.attention{background:#FDECEA;border-left-color:#C0392B;}
 .cal-block.cal-break{background:#EDEDEB;border-left-color:var(--ink-soft);cursor:default;}
+.cal-block.cal-closure{background:#FDECEA;border-left-color:#C0392B;cursor:pointer;}
 .cal-now-line{position:absolute;left:0;right:0;height:0;border-top:2px solid #C0392B;z-index:1;}
 
 .modal-overlay{position:fixed;inset:0;background:rgba(14,36,48,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10;}
