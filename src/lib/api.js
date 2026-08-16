@@ -54,6 +54,20 @@ export async function getAppointmentsForDate(dateISO) {
   return data;
 }
 
+export async function getBayClosuresForDate(dateISO) {
+  if (!isConfigured) return [];
+  const dayStart = `${dateISO}T00:00:00+08:00`;
+  const dayEnd = `${dateISO}T23:59:59+08:00`;
+  const { data, error } = await supabase
+    .from('bay_closures')
+    .select('*, bays(name)')
+    .lt('starts_at', dayEnd)
+    .gt('ends_at', dayStart)
+    .order('starts_at');
+  if (error) throw error;
+  return data;
+}
+
 export async function getBookingSettings() {
   if (!isConfigured) return MOCK_SETTINGS;
   const { data, error } = await supabase.from('booking_settings').select('*').eq('id', 1).single();
@@ -85,7 +99,7 @@ export async function getAvailableSlots(dateISO, serviceId) {
     const base = ['09:00','09:20','09:40','10:00','10:20','10:40','11:00','11:20','11:40','12:00','12:20','12:40'];
     return base.map((t, i) => ({ time: t, available: i !== 5 && i !== 9 }));
   }
-  const bays = await getActiveBays();
+  const bays = (await getActiveBays()).filter(b => b.status === 'open');
   const service = (await getServices()).find(s => s.id === serviceId);
   const settings = await getBookingSettings();
   const bufferMs = settings.buffer_minutes * 60000;
@@ -102,6 +116,7 @@ export async function getAvailableSlots(dateISO, serviceId) {
   if (error) throw error;
 
   const breaks = await getCrewBreaksForDate(dateISO, bays.map(b => b.id));
+  const closures = await getBayClosuresForDate(dateISO);
 
   // NOTE: still uses a hardcoded 9am-7pm scan window and doesn't yet respect
   // weekday/weekend hours or blackout_dates — same simplification as before,
@@ -126,7 +141,8 @@ export async function getAvailableSlots(dateISO, serviceId) {
 
       // Crew breaks are the rest period itself, so no buffer inflation needed.
       const breakConflict = breaks.some(b => b.bay_id === bay.id && slotStart < b.end && b.start < slotEnd);
-      return !breakConflict;
+      const closureConflict = closures.some(c => c.bay_id === bay.id && slotStart < new Date(c.ends_at) && new Date(c.starts_at) < slotEnd);
+      return !breakConflict && !closureConflict;
     });
 
     slots.push({ time, available: Boolean(freeBay), bayId: freeBay?.id });
@@ -135,18 +151,22 @@ export async function getAvailableSlots(dateISO, serviceId) {
 }
 
 // ── Staff-side ───────────────────────────────────────────────────────
-export async function reportBayDown(bayId, { reason } = {}) {
-  if (!isConfigured) return { flagged: 0 };
-  // Close the bay going forward
-  await supabase.from('bays').update({ status: 'maintenance' }).eq('id', bayId);
+export async function reportBayDown(bayId, { startsAt, endsAt, reason } = {}) {
+  if (!isConfigured) return { flagged: 0, id: 'mock' };
+  const { data: closure, error: closureError } = await supabase
+    .from('bay_closures')
+    .insert({ bay_id: bayId, starts_at: startsAt, ends_at: endsAt, reason: reason || null })
+    .select()
+    .single();
+  if (closureError) throw closureError;
 
-  // Flag today's remaining appointments on this bay that couldn't be auto-reassigned
-  const now = new Date().toISOString();
+  // Reassign appointments overlapping the outage where another open bay can take them.
   const { data: atRisk } = await supabase
     .from('appointments')
     .select('*')
     .eq('bay_id', bayId)
-    .gte('scheduled_at', now)
+    .lt('scheduled_at', endsAt)
+    .gte('scheduled_at', startsAt)
     .in('status', ['pending', 'confirmed']);
 
   for (const appt of atRisk ?? []) {
@@ -158,7 +178,19 @@ export async function reportBayDown(bayId, { reason } = {}) {
       await supabase.from('appointments').update({ needs_attention: true }).eq('id', appt.id);
     }
   }
-  return { flagged: (atRisk ?? []).length };
+  return { flagged: (atRisk ?? []).length, id: closure.id };
+}
+
+export async function clearBayClosure(closureId) {
+  if (!isConfigured) return;
+  const { error } = await supabase.from('bay_closures').delete().eq('id', closureId);
+  if (error) throw error;
+}
+
+export async function bringBayUp(bayId) {
+  if (!isConfigured) return;
+  const { error } = await supabase.from('bays').update({ status: 'open' }).eq('id', bayId);
+  if (error) throw error;
 }
 
 export async function updateBookingSettings(patch) {
