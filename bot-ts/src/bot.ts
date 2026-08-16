@@ -4,6 +4,7 @@ import { createMemoryState } from "@chat-adapter/state-memory";
 import { createPostgresState } from "@chat-adapter/state-pg";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { respondToCustomer, type SafeBookingState } from "./booking-agent.js";
+import { transcribeAttachments } from "./transcription.js";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -27,7 +28,18 @@ export const bot = new Chat({
 
 bot.onDirectMessage(async (thread, message) => {
   const state = (await thread.state) as SafeBookingState | null;
-  const response = await respondToCustomer(message.text, state, thread.id);
+  const transcript = await transcribeAttachments(message.attachments);
+  const customerMessage = [message.text?.trim(), transcript].filter(Boolean).join("\n").trim();
+
+  if (!customerMessage) {
+    console.info("[voice] transcription_unavailable", {
+      hasAudio: Boolean(message.attachments?.some((attachment) => attachment.type === "audio")),
+    });
+    await thread.post("I couldn't understand that voice message. Please resend it a little more clearly, or type your request instead.");
+    return;
+  }
+
+  const response = await respondToCustomer(customerMessage, state, thread.id);
   await thread.setState(response.state);
   await thread.post(response.text);
 });
