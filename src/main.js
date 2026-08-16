@@ -277,7 +277,7 @@ async function pageStaffBoard(dateISO) {
       const top = Math.max(dayStart, start.getHours() * 60 + start.getMinutes()) - dayStart;
       const bottom = Math.min(dayEnd, end.getHours() * 60 + end.getMinutes()) - dayStart;
       const height = Math.max(24, bottom - top);
-      return `<div class="cal-block cal-closure" style="top:${top}px;height:${height}px" data-closure="${c.id}">
+      return `<div class="cal-block cal-closure" style="top:${top}px;height:${height}px" data-closure-edit="${c.id}">
         <div class="t1">Bay down</div>
         <div class="t2">${fmtTime(start)}–${fmtTime(end)}${c.reason ? ` · ${c.reason}` : ''}</div>
       </div>`;
@@ -322,9 +322,18 @@ async function pageStaffBoard(dateISO) {
     if (myGen !== renderGen) return;
     pageStaffBoard(date);
   });
-  document.querySelectorAll('[data-closure], [data-clear-closure]').forEach(el => el.onclick = async () => {
+  document.querySelectorAll('[data-closure-edit]').forEach(el => el.onclick = async () => {
+    const closure = closures.find(c => c.id === el.dataset.closureEdit);
+    if (!closure) return;
+    const values = await bayDownDetails(closure.bay_id, date, closure);
+    if (!values) return;
+    await api.updateBayClosure(closure.id, values);
+    if (myGen !== renderGen) return;
+    pageStaffBoard(date);
+  });
+  document.querySelectorAll('[data-clear-closure]').forEach(el => el.onclick = async () => {
     if (!confirm('End this bay outage early?')) return;
-    await api.clearBayClosure(el.dataset.closure || el.dataset.clearClosure);
+    await api.clearBayClosure(el.dataset.clearClosure);
     if (myGen !== renderGen) return;
     pageStaffBoard(date);
   });
@@ -348,11 +357,14 @@ function timeOptions(selected) {
   return html;
 }
 
-async function bayDownDetails(bayId, dateISO) {
+async function bayDownDetails(bayId, dateISO, existing = null) {
   const now = new Date();
-  const startDate = dateISO === localDateISO(now) ? new Date(now) : new Date(`${dateISO}T08:00`);
-  startDate.setMinutes(Math.ceil(startDate.getMinutes() / 15) * 15, 0, 0);
-  const endDate = new Date(startDate.getTime() + 60 * 60000);
+  const existingStart = existing?.starts_at ? new Date(existing.starts_at) : null;
+  const existingEnd = existing?.ends_at ? new Date(existing.ends_at) : null;
+  const startDate = existingStart || (dateISO === localDateISO(now) ? new Date(now) : new Date(\`\${dateISO}T08:00\`));
+  if (!existingStart) startDate.setMinutes(Math.ceil(startDate.getMinutes() / 15) * 15, 0, 0);
+  const endDate = existingEnd || new Date(startDate.getTime() + 60 * 60000);
+  const isEditing = Boolean(existing);
   const pad = n => String(n).padStart(2, '0');
   const dateValue = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const timeValue = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -362,8 +374,8 @@ async function bayDownDetails(bayId, dateISO) {
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
       <div class="modal-card outage-modal">
-        <h3>Report bay down</h3>
-        <p class="lead">Choose exactly when this bay is unavailable. Existing bookings in this window will be checked.</p>
+        <h3>${isEditing ? 'Amend bay outage' : 'Report bay down'}</h3>
+        <p class="lead">${isEditing ? 'Update the outage window or reason, then save.' : 'Choose exactly when this bay is unavailable. Existing bookings in this window will be checked.'}</p>
         <div class="field"><label>Starts</label><div class="outage-datetime">
           <input id="outageStartDate" type="date" value="${dateValue(startDate)}">
           <select id="outageStartTime">${timeOptions(timeValue(startDate))}</select>
@@ -373,11 +385,11 @@ async function bayDownDetails(bayId, dateISO) {
           <select id="outageEndTime">${timeOptions(timeValue(endDate))}</select>
         </div></div>
         <div class="field"><label>Reason <span class="muted">(optional)</span></label>
-          <input id="outageReason" placeholder="e.g. pressure washer repair">
+          <input id="outageReason" value="${existing?.reason || ''}" placeholder="e.g. pressure washer repair">
         </div>
         <div class="settings-row">
           <button class="btn ghost" id="cancelOutage" type="button">Cancel</button>
-          <button class="btn amber" id="saveOutage" type="button">Save outage</button>
+          <button class="btn amber" id="saveOutage" type="button">${isEditing ? 'Save changes' : 'Save outage'}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
