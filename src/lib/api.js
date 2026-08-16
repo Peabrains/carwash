@@ -180,6 +180,17 @@ export async function reportBayDown(bayId, { startsAt, endsAt, reason } = {}) {
   return { flagged: (atRisk ?? []).length, id: closure.id };
 }
 
+export async function updateBayClosure(closureId, { startsAt, endsAt, reason } = {}) {
+  if (!isConfigured) return { id: closureId };
+  const { data, error } = await supabase.from('bay_closures')
+    .update({ starts_at: startsAt, ends_at: endsAt, reason: reason || null })
+    .eq('id', closureId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function clearBayClosure(closureId) {
   if (!isConfigured) return;
   const { error } = await supabase.from('bay_closures').delete().eq('id', closureId);
