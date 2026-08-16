@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+const base = process.env.GITHUB_ACTIONS === 'true' ? '/carwash/' : '/';
+
 export default defineConfig({
-  base: '/carwash/',
+  base,
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
