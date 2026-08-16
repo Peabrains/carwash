@@ -83,19 +83,19 @@ export async function startTier1(thread: Thread) {
   const value: Tier1State = { step: "service", lastActiveAt: new Date().toISOString() };
   await thread.setState(value);
   const c = await context();
-  await thread.post(menu("WashPoint — Book a wash", "Choose a service:", c.services.slice(0, 8).map(s => ({ id: "t1_service", label: s.name, value: s.id }))));
+  await thread.post(menu("WashPoint — Book a wash", "Choose a service:", c.services.slice(0, 8).map((s, index) => ({ id: "t1_service", label: s.name, value: String(index) }))));
 }
 
 export async function startTier1Channel(channel: Channel) {
   const c = await context();
-  await channel.post(menu("WashPoint — Book a wash", "Choose a service:", c.services.slice(0, 8).map(s => ({ id: "t1_service", label: s.name, value: s.id }))));
+  await channel.post(menu("WashPoint — Book a wash", "Choose a service:", c.services.slice(0, 8).map((s, index) => ({ id: "t1_service", label: s.name, value: String(index) }))));
 }
 
 export async function handleTier1Action(thread: Thread, actionId: string, value?: string) {
   const c = await context(); const state = ((await thread.state) as Tier1State | null) ?? { step: "service" };
   if (actionId === "t1_restart") return startTier1(thread);
   if (actionId === "t1_service" && value) {
-    const s = c.services.find(item => item.id === value); if (!s) return startTier1(thread);
+    const s = c.services[Number(value)]; if (!s) return startTier1(thread);
     const dates = Array.from({ length: Math.min(c.settings.max_advance_days + 1, 14) }, (_, i) => addDays(localDate(), i));
     const usable = (await Promise.all(dates.map(async date => ({ date, slots: await available(c, date, s) })))).filter(x => x.slots.length);
     await thread.setState({ ...state, step: "date", serviceId: s.id, serviceName: s.name, durationMinutes: s.duration_minutes, priceMyr: s.price_myr, lastActiveAt: new Date().toISOString() });
