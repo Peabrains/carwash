@@ -361,7 +361,7 @@ async function bayDownDetails(bayId, dateISO, existing = null) {
   const now = new Date();
   const existingStart = existing?.starts_at ? new Date(existing.starts_at) : null;
   const existingEnd = existing?.ends_at ? new Date(existing.ends_at) : null;
-  const startDate = existingStart || (dateISO === localDateISO(now) ? new Date(now) : new Date(\`\${dateISO}T08:00\`));
+  const startDate = existingStart || (dateISO === localDateISO(now) ? new Date(now) : new Date(`${dateISO}T08:00`));
   if (!existingStart) startDate.setMinutes(Math.ceil(startDate.getMinutes() / 15) * 15, 0, 0);
   const endDate = existingEnd || new Date(startDate.getTime() + 60 * 60000);
   const isEditing = Boolean(existing);
