@@ -29,6 +29,7 @@ function localDate(date = new Date()) { return new Intl.DateTimeFormat("en-CA", 
 function addDays(dateIso: string, days: number) { const d = new Date(`${dateIso}T12:00:00+08:00`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); }
 function mins(value: string) { const [h, m] = value.slice(0, 5).split(":").map(Number); return h * 60 + m; }
 function formatDate(value: string) { return new Intl.DateTimeFormat("en-MY", { timeZone: "Asia/Kuala_Lumpur", weekday: "short", day: "numeric", month: "short" }).format(new Date(`${value}T12:00:00+08:00`)); }
+function formatShortDate(value: string) { return new Intl.DateTimeFormat("en-MY", { timeZone: "Asia/Kuala_Lumpur", weekday: "short", day: "numeric" }).format(new Date(`${value}T12:00:00+08:00`)); }
 function serviceLabel(service: Service) { return `${service.name} — ${service.duration_minutes} min, RM${service.price_myr}`; }
 function phone(value: string) { return value.match(/(?:\+?6?0)1[0-9][\s-]?\d{3,4}[\s-]?\d{3,4}\b/)?.[0].replace(/[\s-]/g, ""); }
 function isYes(value: string) { return /^(yes|y|confirm|confirmed|ya|betul|ok|okay)$/i.test(value.trim()); }
@@ -76,7 +77,8 @@ async function available(contextValue: Context, dateIso: string, service: Servic
 }
 
 function menu(title: string, body: string, buttons: Array<{ id: string; label: string; value?: string }>) {
-  return Card({ title, children: [CardText(body), Actions(buttons.map(button => Button({ id: button.id, label: button.label, value: button.value })))] });
+  const rows = Array.from({ length: Math.ceil(buttons.length / 3) }, (_, index) => buttons.slice(index * 3, index * 3 + 3));
+  return Card({ title, children: [CardText(body), ...rows.map(row => Actions(row.map(button => Button({ id: button.id, label: button.label, value: button.value }))) )] });
 }
 
 export async function startTier1(thread: Thread) {
@@ -95,18 +97,21 @@ export async function handleTier1Action(thread: Thread, actionId: string, value?
   const c = await context(); const state = ((await thread.state) as Tier1State | null) ?? { step: "service" };
   if (actionId === "t1_restart") return startTier1(thread);
   if (actionId === "t1_service" && value) {
+    if (state.step !== "service") return thread.post("That menu has expired. Please send /start to begin again.");
     const s = c.services[Number(value)]; if (!s) return startTier1(thread);
     const dates = Array.from({ length: Math.min(c.settings.max_advance_days + 1, 14) }, (_, i) => addDays(localDate(), i));
     const usable = (await Promise.all(dates.map(async date => ({ date, slots: await available(c, date, s) })))).filter(x => x.slots.length);
     await thread.setState({ ...state, step: "date", serviceId: s.id, serviceName: s.name, durationMinutes: s.duration_minutes, priceMyr: s.price_myr, lastActiveAt: new Date().toISOString() });
-    return thread.post(menu(s.name, "Choose an available date:", usable.slice(0, 10).map(x => ({ id: "t1_date", label: formatDate(x.date), value: x.date }))));
+    return thread.post(menu(s.name, "Choose an available date:", usable.slice(0, 10).map(x => ({ id: "t1_date", label: formatShortDate(x.date), value: x.date }))));
   }
   if (actionId === "t1_date" && value && state.serviceId) {
+    if (state.step !== "date") return thread.post("That date menu has expired. Please send /start to begin again.");
     const s = c.services.find(item => item.id === state.serviceId); if (!s) return startTier1(thread);
     const slots = await available(c, value, s); await thread.setState({ ...state, step: "time", dateIso: value, lastActiveAt: new Date().toISOString() });
     return thread.post(slots.length ? menu(formatDate(value), "Choose an available time:", slots.map(time => ({ id: "t1_time", label: time, value: time }))) : "That date has just filled up. Please send /start to choose another date.");
   }
   if (actionId === "t1_time" && value && state.serviceId && state.dateIso) {
+    if (state.step !== "time") return thread.post("That time menu has expired. Please send /start to begin again.");
     const s = c.services.find(item => item.id === state.serviceId); if (!s || !(await available(c, state.dateIso, s, value)).includes(value)) return thread.post("That time is no longer available. Please send /start to choose again.");
     await thread.setState({ ...state, step: "name", time24h: value, lastActiveAt: new Date().toISOString() }); return thread.post("Please type your name.");
   }
