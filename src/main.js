@@ -302,7 +302,7 @@ async function pageStaffBoard(dateISO) {
         ${tracks}
       </div>
     </div>
-    ${staff.role === 'owner' ? `<div class="settings-row" style="margin-top:14px">${bays.map(b => b.status === 'maintenance' ? `<button class="mini-btn" data-bring-up="${b.id}">Bring ${b.name} back online</button>` : `<button class="mini-btn" data-report="${b.id}">Report ${b.name} down</button>`).join('')}</div>` : ''}
+    ${staff.role === 'owner' ? `<div class="settings-row" style="margin-top:14px">${bays.map(b => { if (b.status === 'maintenance') return `<button class="mini-btn" data-bring-up="${b.id}">Bring ${b.name} back online</button>`; const outage = (closuresByBay[b.id] || []).find(c => new Date(c.ends_at) > new Date()); return outage ? `<button class="mini-btn" data-clear-closure="${outage.id}">End ${b.name} outage</button>` : `<button class="mini-btn" data-report="${b.id}">Report ${b.name} down</button>`; }).join('')}</div>` : ''}
   `);
   document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => pageStaffBoard(el.dataset.date));
   document.querySelectorAll('[data-appt]').forEach(el => el.onclick = () => {
@@ -322,9 +322,9 @@ async function pageStaffBoard(dateISO) {
     if (myGen !== renderGen) return;
     pageStaffBoard(date);
   });
-  document.querySelectorAll('[data-closure]').forEach(el => el.onclick = async () => {
-    if (!confirm('Clear this bay outage early?')) return;
-    await api.clearBayClosure(el.dataset.closure);
+  document.querySelectorAll('[data-closure], [data-clear-closure]').forEach(el => el.onclick = async () => {
+    if (!confirm('End this bay outage early?')) return;
+    await api.clearBayClosure(el.dataset.closure || el.dataset.clearClosure);
     if (myGen !== renderGen) return;
     pageStaffBoard(date);
   });
@@ -336,24 +336,66 @@ function localDateTimeValue(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-async function bayDownDetails(bayId, dateISO) {
-  const now = new Date();
-  const startDefault = dateISO === localDateISO(now) ? localDateTimeValue(now) : `${dateISO}T08:00`;
-  const endDefault = `${dateISO}T19:00`;
-  const starts = prompt('Bay outage starts (local time):', startDefault);
-  if (!starts) return null;
-  const ends = prompt('Bay outage ends (local time):', endDefault);
-  if (!ends) return null;
-  const reason = prompt('Reason (optional):', '') || '';
-  const startDate = new Date(starts);
-  const endDate = new Date(ends);
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
-    alert('Please enter a valid outage window with an end time after the start time.');
-    return null;
+function timeOptions(selected) {
+  let html = '';
+  for (let mins = 0; mins < 24 * 60; mins += 15) {
+    const h = String(Math.floor(mins / 60)).padStart(2, '0');
+    const m = String(mins % 60).padStart(2, '0');
+    const value = \`\${h}:\${m}\`;
+    const label = new Date(\`2000-01-01T\${value}\`).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    html += \`<option value="\${value}" \${value === selected ? 'selected' : ''}>\${label}</option>\`;
   }
-  return { startsAt: startDate.toISOString(), endsAt: endDate.toISOString(), reason };
+  return html;
 }
 
+async function bayDownDetails(bayId, dateISO) {
+  const now = new Date();
+  const startDate = dateISO === localDateISO(now) ? new Date(now) : new Date(\`\${dateISO}T08:00\`);
+  startDate.setMinutes(Math.ceil(startDate.getMinutes() / 15) * 15, 0, 0);
+  const endDate = new Date(startDate.getTime() + 60 * 60000);
+  const pad = n => String(n).padStart(2, '0');
+  const dateValue = d => \`\${d.getFullYear()}-\${pad(d.getMonth() + 1)}-\${pad(d.getDate())}\`;
+  const timeValue = d => \`\${pad(d.getHours())}:\${pad(d.getMinutes())}\`;
+
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = \`
+      <div class="modal-card outage-modal">
+        <h3>Report bay down</h3>
+        <p class="lead">Choose exactly when this bay is unavailable. Existing bookings in this window will be checked.</p>
+        <div class="field"><label>Starts</label><div class="outage-datetime">
+          <input id="outageStartDate" type="date" value="\${dateValue(startDate)}">
+          <select id="outageStartTime">\${timeOptions(timeValue(startDate))}</select>
+        </div></div>
+        <div class="field"><label>Ends</label><div class="outage-datetime">
+          <input id="outageEndDate" type="date" value="\${dateValue(endDate)}">
+          <select id="outageEndTime">\${timeOptions(timeValue(endDate))}</select>
+        </div></div>
+        <div class="field"><label>Reason <span class="muted">(optional)</span></label>
+          <input id="outageReason" placeholder="e.g. pressure washer repair">
+        </div>
+        <div class="settings-row">
+          <button class="btn ghost" id="cancelOutage" type="button">Cancel</button>
+          <button class="btn amber" id="saveOutage" type="button">Save outage</button>
+        </div>
+      </div>\`;
+    document.body.appendChild(overlay);
+
+    const close = value => { overlay.remove(); resolve(value); };
+    overlay.onclick = e => { if (e.target === overlay) close(null); };
+    overlay.querySelector('#cancelOutage').onclick = () => close(null);
+    overlay.querySelector('#saveOutage').onclick = () => {
+      const start = new Date(\`\${overlay.querySelector('#outageStartDate').value}T\${overlay.querySelector('#outageStartTime').value}\`);
+      const end = new Date(\`\${overlay.querySelector('#outageEndDate').value}T\${overlay.querySelector('#outageEndTime').value}\`);
+      if (!overlay.querySelector('#outageStartDate').value || !overlay.querySelector('#outageEndDate').value || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+        alert('Please choose a valid window with the end after the start.');
+        return;
+      }
+      close({ startsAt: start.toISOString(), endsAt: end.toISOString(), reason: overlay.querySelector('#outageReason').value.trim() });
+    };
+  });
+}
 async function pageStaffSettings() {
   const myGen = ++renderGen;
   const staff = await requireStaff(myGen);
