@@ -1,0 +1,26 @@
+{
+  "name": "carwash-telegram-bot-ts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/dev.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/gateway": "^4.0.52",
+    "@chat-adapter/state-memory": "latest",
+    "@chat-adapter/state-pg": "^4.38.0",
+    "@chat-adapter/telegram": "latest",
+    "@supabase/supabase-js": "latest",
+    "ai": "latest",
+    "chat": "latest",
+    "dotenv": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vercel": "^59.1.3"
+  }
+}
