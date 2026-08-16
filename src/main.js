@@ -341,36 +341,36 @@ function timeOptions(selected) {
   for (let mins = 0; mins < 24 * 60; mins += 15) {
     const h = String(Math.floor(mins / 60)).padStart(2, '0');
     const m = String(mins % 60).padStart(2, '0');
-    const value = \`\${h}:\${m}\`;
-    const label = new Date(\`2000-01-01T\${value}\`).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    html += \`<option value="\${value}" \${value === selected ? 'selected' : ''}>\${label}</option>\`;
+    const value = `${h}:${m}`;
+    const label = new Date(`2000-01-01T${value}`).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    html += `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`;
   }
   return html;
 }
 
 async function bayDownDetails(bayId, dateISO) {
   const now = new Date();
-  const startDate = dateISO === localDateISO(now) ? new Date(now) : new Date(\`\${dateISO}T08:00\`);
+  const startDate = dateISO === localDateISO(now) ? new Date(now) : new Date(`${dateISO}T08:00`);
   startDate.setMinutes(Math.ceil(startDate.getMinutes() / 15) * 15, 0, 0);
   const endDate = new Date(startDate.getTime() + 60 * 60000);
   const pad = n => String(n).padStart(2, '0');
-  const dateValue = d => \`\${d.getFullYear()}-\${pad(d.getMonth() + 1)}-\${pad(d.getDate())}\`;
-  const timeValue = d => \`\${pad(d.getHours())}:\${pad(d.getMinutes())}\`;
+  const dateValue = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const timeValue = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
-    overlay.innerHTML = \`
+    overlay.innerHTML = `
       <div class="modal-card outage-modal">
         <h3>Report bay down</h3>
         <p class="lead">Choose exactly when this bay is unavailable. Existing bookings in this window will be checked.</p>
         <div class="field"><label>Starts</label><div class="outage-datetime">
-          <input id="outageStartDate" type="date" value="\${dateValue(startDate)}">
-          <select id="outageStartTime">\${timeOptions(timeValue(startDate))}</select>
+          <input id="outageStartDate" type="date" value="${dateValue(startDate)}">
+          <select id="outageStartTime">${timeOptions(timeValue(startDate))}</select>
         </div></div>
         <div class="field"><label>Ends</label><div class="outage-datetime">
-          <input id="outageEndDate" type="date" value="\${dateValue(endDate)}">
-          <select id="outageEndTime">\${timeOptions(timeValue(endDate))}</select>
+          <input id="outageEndDate" type="date" value="${dateValue(endDate)}">
+          <select id="outageEndTime">${timeOptions(timeValue(endDate))}</select>
         </div></div>
         <div class="field"><label>Reason <span class="muted">(optional)</span></label>
           <input id="outageReason" placeholder="e.g. pressure washer repair">
@@ -379,15 +379,15 @@ async function bayDownDetails(bayId, dateISO) {
           <button class="btn ghost" id="cancelOutage" type="button">Cancel</button>
           <button class="btn amber" id="saveOutage" type="button">Save outage</button>
         </div>
-      </div>\`;
+      </div>`;
     document.body.appendChild(overlay);
 
     const close = value => { overlay.remove(); resolve(value); };
     overlay.onclick = e => { if (e.target === overlay) close(null); };
     overlay.querySelector('#cancelOutage').onclick = () => close(null);
     overlay.querySelector('#saveOutage').onclick = () => {
-      const start = new Date(\`\${overlay.querySelector('#outageStartDate').value}T\${overlay.querySelector('#outageStartTime').value}\`);
-      const end = new Date(\`\${overlay.querySelector('#outageEndDate').value}T\${overlay.querySelector('#outageEndTime').value}\`);
+      const start = new Date(`${overlay.querySelector('#outageStartDate').value}T${overlay.querySelector('#outageStartTime').value}`);
+      const end = new Date(`${overlay.querySelector('#outageEndDate').value}T${overlay.querySelector('#outageEndTime').value}`);
       if (!overlay.querySelector('#outageStartDate').value || !overlay.querySelector('#outageEndDate').value || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
         alert('Please choose a valid window with the end after the start.');
         return;
