@@ -4,7 +4,7 @@ import type { Channel, Thread } from "chat";
 import { Actions, Button, Card, CardText } from "chat";
 
 export type Tier1State = {
-  step: "service" | "date" | "time" | "name" | "phone" | "confirm" | "completed";
+  step: "service" | "date" | "time" | "name" | "phone" | "confirm" | "submitting" | "completed";
   serviceId?: string;
   serviceName?: string;
   durationMinutes?: number;
@@ -117,6 +117,8 @@ export async function handleTier1Action(thread: Thread, actionId: string, value?
     await thread.setState({ ...state, step: "name", time24h: value, lastActiveAt: new Date().toISOString() }); return thread.post("Please type your name.");
   }
   if (actionId === "t1_confirm") {
+    if (state.step === "submitting") return;
+    if (state.step === "completed") return thread.post("That booking has already been confirmed.");
     return confirmTier1(thread, c, state);
   }
   return thread.post("Please use the buttons above, or send /start to begin again.");
@@ -124,11 +126,24 @@ export async function handleTier1Action(thread: Thread, actionId: string, value?
 
 async function confirmTier1(thread: Thread, c: Context, state: Tier1State) {
   if (!supabase || !state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone) return thread.post("I still need your name and Malaysian phone number before confirming.");
-  const service = c.services.find(s => s.id === state.serviceId); if (!service || !(await available(c, state.dateIso, service, state.time24h)).includes(state.time24h)) return thread.post("That time is no longer available. Please send /start to choose another slot.");
-  const bay = await supabase.from("bays").select("id").eq("is_active", true).eq("status", "open").limit(1).maybeSingle(); if (!bay.data) return thread.post("No bay is available right now. Please try another time.");
+  await thread.setState({ ...state, step: "submitting", lastActiveAt: new Date().toISOString() });
+  const service = c.services.find(s => s.id === state.serviceId);
+  if (!service || !(await available(c, state.dateIso, service, state.time24h)).includes(state.time24h)) {
+    await thread.setState({ ...state, step: "confirm", lastActiveAt: new Date().toISOString() });
+    return thread.post("That time is no longer available. Please send /start to choose another slot.");
+  }
+  const bay = await supabase.from("bays").select("id").eq("is_active", true).eq("status", "open").limit(1).maybeSingle();
+  if (!bay.data) {
+    await thread.setState({ ...state, step: "confirm", lastActiveAt: new Date().toISOString() });
+    return thread.post("No bay is available right now. Please try another time.");
+  }
   const reference = `WP-T1-${state.dateIso.replaceAll("-", "")}-${Math.floor(1000 + Math.random() * 9000)}`;
-  const result = await supabase.from("appointments").insert({ customer_chat_id: thread.id, customer_name: state.customerName, customer_phone: state.customerPhone, channel: "telegram-tier1", bay_id: bay.data.id, service_id: service.id, scheduled_at: new Date(`${state.dateIso}T${state.time24h}:00+08:00`).toISOString(), duration_minutes: service.duration_minutes, price_myr: service.price_myr, status: "confirmed", reference });
-  if (result.error) return thread.post("I couldn't confirm that booking. Nothing was saved—please try again.");
+  const result = await supabase.from("appointments").insert({ customer_chat_id: thread.id, customer_name: state.customerName, customer_phone: state.customerPhone, channel: "telegram", bay_id: bay.data.id, service_id: service.id, scheduled_at: new Date(`${state.dateIso}T${state.time24h}:00+08:00`).toISOString(), duration_minutes: service.duration_minutes, price_myr: service.price_myr, status: "confirmed", reference });
+  if (result.error) {
+    console.error("[tier1] confirmation_failed", { code: result.error.code, message: result.error.message, details: result.error.details, hint: result.error.hint });
+    await thread.setState({ ...state, step: "confirm", lastActiveAt: new Date().toISOString() });
+    return thread.post("I couldn't confirm that booking. Nothing was saved—please try again.");
+  }
   await thread.setState({ ...state, step: "completed", lastActiveAt: new Date().toISOString() }); return thread.post(`Confirmed — ${service.name} on ${formatDate(state.dateIso)} at ${state.time24h}. Reference: ${reference}`);
 }
 
