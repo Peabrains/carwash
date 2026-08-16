@@ -1,334 +1,104 @@
 import "./env.js";
 import { createClient } from "@supabase/supabase-js";
-import { generateObject, generateText } from "ai";
+import { generateObject } from "ai";
 import { z } from "zod";
 import type { GatewayProviderOptions } from "@ai-sdk/gateway";
 import { bookingModel } from "./model.js";
 
-type ConversationTurn = { role: "user" | "assistant"; content: string };
-
+type Turn = { role: "user" | "assistant"; content: string };
 export type SafeBookingState = {
-  serviceName?: string;
-  dateIso?: string;
-  time24h?: string;
-  hasCustomerName?: boolean;
-  hasPhoneNumber?: boolean;
-  language?: "en" | "ms";
-  slotAvailable?: boolean;
-  status?: "collecting_details" | "awaiting_confirmation" | "completed";
-  recentTurns?: ConversationTurn[];
-  lastActiveAt?: string;
+  serviceName?: string; dateIso?: string; time24h?: string;
+  customerName?: string; customerPhone?: string; language?: "en" | "ms";
+  status?: "collecting" | "awaiting_confirmation" | "completed";
+  recentTurns?: Turn[]; lastActiveAt?: string;
 };
+type Service = { id: string; name: string; duration_minutes: number; price_myr: number };
+type Settings = { min_lead_minutes: number; max_advance_days: number; buffer_minutes: number; weekday_open: string; weekday_close: string; weekend_open: string; weekend_close: string };
+type Availability = { available: boolean; bayId?: string; reason: string };
+const schema = z.object({ reply: z.string(), intent: z.enum(["new_booking","answer","restart","cancel","reschedule","other"]), language: z.enum(["en","ms"]), serviceName: z.string().nullable(), dateIso: z.string().nullable(), time24h: z.string().nullable(), customerName: z.string().nullable(), handoff: z.boolean() });
+const fallback: Settings = { min_lead_minutes: 60, max_advance_days: 14, buffer_minutes: 15, weekday_open: "08:00", weekday_close: "19:00", weekend_open: "08:00", weekend_close: "21:00" };
+const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY) : null;
+function redact(text: string) { return text.replace(/(?:\+?6?0)1[0-9][\s-]?\d{3,4}[\s-]?\d{3,4}\b/g, "[PHONE REDACTED]"); }
+function findPhone(text: string) { const m = text.match(/(?:\+?6?0)1[0-9][\s-]?\d{3,4}[\s-]?\d{3,4}\b/); return m && m[0].replace(/[\s-]/g, ""); }
+function todayMalaysia() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuala_Lumpur", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
+function serviceFor(name: string | null | undefined, services: Service[]) { if (!name) return undefined; const n = name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); return services.find(s => { const c = s.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); return c === n || c.includes(n) || n.includes(c); }); }
+function validDate(v?: string | null) { return v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined; }
+function validTime(v?: string | null) { return v && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : undefined; }
+function mins(v: string) { const p = v.slice(0,5).split(":").map(Number); return p[0] * 60 + p[1]; }
 
-const extractionSchema = z.object({
-  intent: z.enum(["new_booking", "answer", "restart", "cancel", "reschedule", "other"]),
-  serviceName: z.string().nullable(),
-  dateIso: z.string().nullable(),
-  time24h: z.string().nullable(),
-  hasCustomerName: z.boolean(),
-  customerLanguage: z.enum(["en", "ms"]),
-});
-
-type Service = { name: string; duration_minutes: number; price_myr: number };
-type BookingSettings = {
-  min_lead_minutes: number;
-  max_advance_days: number;
-  buffer_minutes: number;
-  weekday_open: string;
-  weekday_close: string;
-  weekend_open: string;
-  weekend_close: string;
-};
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
-
-function redactPhoneNumbers(text: string): string {
-  return text.replace(/(?:\+?6?0)1[0-9][\s-]?\d{3,4}[\s-]?\d{3,4}\b/g, "[PHONE REDACTED]");
-}
-
-function hasMalaysianPhoneNumber(text: string): boolean {
-  return /(?:\+?6?0)1[0-9][\s-]?\d{3,4}[\s-]?\d{3,4}\b/.test(text);
-}
-
-async function loadServices(): Promise<Service[]> {
-  if (!supabase) return [];
-  const { data, error } = await supabase.from("services").select("name,duration_minutes,price_myr").eq("is_active", true).order("name");
-  return error ? [] : (data ?? []) as Service[];
-}
-
-async function loadBookingSettings(): Promise<BookingSettings> {
-  const fallback = { min_lead_minutes: 60, max_advance_days: 14, buffer_minutes: 15, weekday_open: "08:00", weekday_close: "19:00", weekend_open: "08:00", weekend_close: "21:00" };
-  if (!supabase) return fallback;
-  const { data, error } = await supabase
-    .from("booking_settings")
-    .select("min_lead_minutes,max_advance_days,buffer_minutes,weekday_open,weekday_close,weekend_open,weekend_close")
-    .eq("id", 1)
-    .maybeSingle();
-  if (error || !data) {
-    console.warn("[booking-agent] booking settings unavailable; using safe defaults", { error: error?.message });
-    return fallback;
-  }
-  return {
-    min_lead_minutes: Number(data.min_lead_minutes) || fallback.min_lead_minutes,
-    max_advance_days: Number(data.max_advance_days) || fallback.max_advance_days,
-    buffer_minutes: Number(data.buffer_minutes) || fallback.buffer_minutes,
-    weekday_open: data.weekday_open || fallback.weekday_open,
-    weekday_close: data.weekday_close || fallback.weekday_close,
-    weekend_open: data.weekend_open || fallback.weekend_open,
-    weekend_close: data.weekend_close || fallback.weekend_close,
-  };
-}
-
-type Availability = { available: boolean; reason?: "closed" | "outside_hours" | "fully_booked" | "unavailable" };
-
-function timeMinutes(value: string): number {
-  const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
-  return hours * 60 + minutes;
-}
-
-async function checkAvailability(dateIso: string, time24h: string, service: Service, settings: BookingSettings): Promise<Availability> {
-  if (!supabase) return { available: false, reason: "unavailable" };
-  const requested = new Date(`${dateIso}T${time24h}:00+08:00`);
-  // Use noon so the UTC conversion cannot move the date into the previous day.
-  const day = new Date(`${dateIso}T12:00:00+08:00`).getUTCDay();
-  const weekend = day === 0 || day === 6;
-  const open = weekend ? settings.weekend_open : settings.weekday_open;
-  const close = weekend ? settings.weekend_close : settings.weekday_close;
-  const requestedMinutes = timeMinutes(time24h);
-  if (requestedMinutes < timeMinutes(open) || requestedMinutes + service.duration_minutes > timeMinutes(close)) {
-    return { available: false, reason: "outside_hours" };
-  }
-
-  const dayStart = `${dateIso}T00:00:00+08:00`;
-  const dayEnd = `${dateIso}T23:59:59+08:00`;
-  const [baysResult, appointmentsResult, breaksResult, closuresResult, blackoutResult] = await Promise.all([
-    supabase.from("bays").select("id").eq("is_active", true).eq("status", "open"),
-    supabase.from("appointments").select("bay_id,scheduled_at,duration_minutes").neq("status", "cancelled").gte("scheduled_at", dayStart).lte("scheduled_at", dayEnd),
-    supabase.from("crew_break_schedule").select("bay_id,start_time,duration_minutes"),
-    supabase.from("bay_closures").select("bay_id,starts_at,ends_at").lte("starts_at", dayEnd).gte("ends_at", dayStart),
-    supabase.from("blackout_dates").select("label").eq("date", dateIso),
+async function loadContext(): Promise<{ services: Service[]; settings: Settings }> {
+  if (!supabase) return { services: [], settings: fallback };
+  const [a,b] = await Promise.all([
+    supabase.from("services").select("id,name,duration_minutes,price_myr").eq("is_active", true).order("name"),
+    supabase.from("booking_settings").select("min_lead_minutes,max_advance_days,buffer_minutes,weekday_open,weekday_close,weekend_open,weekend_close").eq("id", 1).maybeSingle(),
   ]);
-  if ([baysResult, appointmentsResult, breaksResult, closuresResult, blackoutResult].some((result) => result.error)) {
-    console.warn("[booking-agent] availability lookup failed", {
-      errors: [baysResult, appointmentsResult, breaksResult, closuresResult, blackoutResult].map((result) => result.error?.message).filter(Boolean),
-    });
-    return { available: false, reason: "unavailable" };
+  const r = b.data;
+  const settings: Settings = r ? { min_lead_minutes: Number(r.min_lead_minutes)||60, max_advance_days: Number(r.max_advance_days)||14, buffer_minutes: Number(r.buffer_minutes)||15, weekday_open: r.weekday_open||"08:00", weekday_close: r.weekday_close||"19:00", weekend_open: r.weekend_open||"08:00", weekend_close: r.weekend_close||"21:00" } : fallback;
+  return { services: (a.data || []) as Service[], settings };
+}
+async function checkAvailability(dateIso: string, time: string, service: Service, settings: Settings): Promise<Availability> {
+  if (!supabase) return { available: false, reason: "unavailable" };
+  const latest = new Date(todayMalaysia() + "T12:00:00+08:00");
+  latest.setUTCDate(latest.getUTCDate() + settings.max_advance_days);
+  if (new Date(dateIso + "T12:00:00+08:00").getTime() > latest.getTime()) return { available: false, reason: "too_far" };
+  const requested = new Date(dateIso + "T" + time + ":00+08:00");
+  const day = new Date(dateIso + "T12:00:00+08:00").getUTCDay();
+  const open = day === 0 || day === 6 ? settings.weekend_open : settings.weekday_open;
+  const close = day === 0 || day === 6 ? settings.weekend_close : settings.weekday_close;
+  if (mins(time) < mins(open) || mins(time) + service.duration_minutes > mins(close)) return { available:false, reason:"outside_hours" };
+  if (requested.getTime() < Date.now() + settings.min_lead_minutes * 60000) return { available:false, reason:"too_soon" };
+  const startIso = dateIso + "T00:00:00+08:00", endIso = dateIso + "T23:59:59+08:00";
+  const [blackout,bays,appts,breaks,closures] = await Promise.all([
+    supabase.from("blackout_dates").select("label").eq("date", dateIso),
+    supabase.from("bays").select("id").eq("is_active", true).eq("status", "open"),
+    supabase.from("appointments").select("bay_id,scheduled_at,duration_minutes").neq("status","cancelled").gte("scheduled_at",startIso).lte("scheduled_at",endIso),
+    supabase.from("crew_break_schedule").select("bay_id,start_time,duration_minutes"),
+    supabase.from("bay_closures").select("bay_id,starts_at,ends_at").lte("starts_at",endIso).gte("ends_at",startIso),
+  ]);
+  if ([blackout,bays,appts,breaks,closures].some(x => x.error)) return { available:false, reason:"unavailable" };
+  if ((blackout.data || []).length) return { available:false, reason:"closed" };
+  const start=requested.getTime(), end=start+service.duration_minutes*60000, overlap=(a:number,b:number,c:number,d:number)=>a<d&&c<b;
+  for (const bay of (bays.data || []) as {id:string}[]) {
+    const busy=(appts.data||[]).some(a=>{if(a.bay_id!==bay.id)return false;const s=new Date(a.scheduled_at).getTime();return overlap(start,end,s,s+Number(a.duration_minutes)*60000+settings.buffer_minutes*60000);});
+    const breakBusy=(breaks.data||[]).some(b=>{if(b.bay_id!==bay.id)return false;const s=new Date(dateIso+"T"+String(b.start_time).slice(0,5)+":00+08:00").getTime();return overlap(start,end,s,s+Number(b.duration_minutes)*60000);});
+    const closed=(closures.data||[]).some(c=>c.bay_id===bay.id&&overlap(start,end,new Date(c.starts_at).getTime(),new Date(c.ends_at).getTime()));
+    if(!busy&&!breakBusy&&!closed)return {available:true,bayId:bay.id,reason:"available"};
   }
-  if ((blackoutResult.data ?? []).length > 0) return { available: false, reason: "closed" };
+  return {available:false,reason:"fully_booked"};
+}
 
-  const requestedStart = requested.getTime();
-  const requestedEnd = requestedStart + service.duration_minutes * 60_000;
-  const buffer = settings.buffer_minutes * 60_000;
-  const bays = (baysResult.data ?? []) as { id: string }[];
-  const appointments = (appointmentsResult.data ?? []) as { bay_id: string; scheduled_at: string; duration_minutes: number }[];
-  const breaks = (breaksResult.data ?? []) as { bay_id: string; start_time: string; duration_minutes: number }[];
-  const closures = (closuresResult.data ?? []) as { bay_id: string; starts_at: string; ends_at: string }[];
+async function submitBooking(state: SafeBookingState, context: {services:Service[];settings:Settings}, chatId: string): Promise<string> {
+  if(!supabase||!state.serviceName||!state.dateIso||!state.time24h||!state.customerName||!state.customerPhone)return "I still need the complete booking details before submitting.";
+  const service=serviceFor(state.serviceName,context.services); if(!service)return "I couldn't match that service to the live catalogue.";
+  const slot=await checkAvailability(state.dateIso,state.time24h,service,context.settings); if(!slot.available||!slot.bayId)return "That slot is no longer available. Please choose another time.";
+  const reference="WP-"+state.dateIso.replaceAll("-","")+"-"+Math.floor(1000+Math.random()*9000);
+  const result=await supabase.from("appointments").insert({customer_chat_id:chatId,customer_name:state.customerName,customer_phone:state.customerPhone,channel:"telegram",bay_id:slot.bayId,service_id:service.id,scheduled_at:new Date(state.dateIso+"T"+state.time24h+":00+08:00").toISOString(),duration_minutes:service.duration_minutes,price_myr:service.price_myr,status:"confirmed",reference});
+  if(result.error){console.error("[booking-agent] handoff failed",{error:result.error.message});return "I couldn't complete that booking. Nothing was confirmed—please try again.";}
+  return "Confirmed — "+service.name+" on "+state.dateIso+" at "+state.time24h+". Your reference is "+reference+".";
+}
 
-  const hasOverlap = (start: number, end: number, otherStart: number, otherEnd: number) => start < otherEnd && otherStart < end;
-  const freeBay = bays.some((bay) => {
-    const appointmentConflict = appointments.some((appointment) => {
-      if (appointment.bay_id !== bay.id) return false;
-      const start = new Date(appointment.scheduled_at).getTime();
-      return hasOverlap(requestedStart, requestedEnd, start, start + appointment.duration_minutes * 60_000 + buffer);
-    });
-    if (appointmentConflict) return false;
-    const breakConflict = breaks.some((item) => {
-      if (item.bay_id !== bay.id) return false;
-      const start = new Date(`${dateIso}T${item.start_time.slice(0, 5)}:00+08:00`).getTime();
-      return hasOverlap(requestedStart, requestedEnd, start, start + item.duration_minutes * 60_000);
-    });
-    if (breakConflict) return false;
-    return !closures.some((closure) => closure.bay_id === bay.id && hasOverlap(requestedStart, requestedEnd, new Date(closure.starts_at).getTime(), new Date(closure.ends_at).getTime()));
+export async function respondToCustomer(message: string, previous: SafeBookingState | null, chatId = "unknown"): Promise<{text:string;state:SafeBookingState}> {
+  const context=await loadContext(), prior=previous||{}, safe=redact(message), turns=prior.recentTurns||[];
+  const service=serviceFor(prior.serviceName,context.services);
+  const liveAvailability=prior.dateIso&&prior.time24h&&service ? await checkAvailability(prior.dateIso,prior.time24h,service,context.settings) : {reason:"not_checked"};
+  const result=await generateObject({
+    model:bookingModel,schema,
+    system:"You are Luna, the complete WashPoint booking agent. Today in Malaysia is "+todayMalaysia()+". Use the live context as authoritative knowledge. Understand English, Malay, Manglish, shorthand, corrections and all customer context. Do not ask for information already in the draft. Ask one focused question at a time. Default to English unless the customer clearly uses Malay/Manglish. Collect service, date, time, name and Malaysian phone. Never claim availability unless the result says available. Before handoff, present all details and obtain a clear yes/confirm. Set handoff true only after that confirmation. LIVE CONTEXT: "+JSON.stringify(context)+" AVAILABILITY: "+JSON.stringify(liveAvailability),
+    prompt:"DRAFT: "+JSON.stringify(prior)+"\nCONVERSATION:\n"+(turns.map(t=>t.role+": "+t.content).join("\n")||"(none)")+"\nLATEST CUSTOMER MESSAGE:\n"+safe,
+    providerOptions:{gateway:{disallowPromptTraining:true} satisfies GatewayProviderOptions},
   });
-  return freeBay ? { available: true } : { available: false, reason: "fully_booked" };
-}
-
-function malaysiaToday(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuala_Lumpur", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-}
-
-function serviceText(services: Service[]): string {
-  return services.length > 0 ? services.map((s) => `${s.name}: ${s.duration_minutes} min, RM${s.price_myr}`).join("; ") : "Service catalogue unavailable during this test.";
-}
-
-function canonicalService(value: string | null, services: Service[]): string | undefined {
-  if (!value) return undefined;
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const match = services.find((s) => {
-    const candidate = s.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    return candidate === normalized || candidate.includes(normalized) || normalized.includes(candidate);
-  });
-  return match?.name;
-}
-
-function validDate(value: string | null): string | undefined {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
-}
-
-function validTime(value: string | null): string | undefined {
-  return value && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : undefined;
-}
-
-function dateAtMalaysiaMidnight(dateIso: string): Date {
-  return new Date(`${dateIso}T00:00:00+08:00`);
-}
-
-function bookingDateError(dateIso: string, time24h: string, settings: BookingSettings): "too_early" | "too_far" | undefined {
-  const requested = new Date(`${dateIso}T${time24h}:00+08:00`);
-  if (Number.isNaN(requested.getTime())) return undefined;
-
-  const now = new Date();
-  if (requested.getTime() < now.getTime() + settings.min_lead_minutes * 60_000) return "too_early";
-
-  const latestDate = dateAtMalaysiaMidnight(malaysiaToday());
-  latestDate.setUTCDate(latestDate.getUTCDate() + settings.max_advance_days);
-  if (dateAtMalaysiaMidnight(dateIso).getTime() > latestDate.getTime()) return "too_far";
-  return undefined;
-}
-
-function bookingDateErrorText(error: "too_early" | "too_far", settings: BookingSettings, language: "en" | "ms"): string {
-  const leadTime = settings.min_lead_minutes < 60
-    ? `${settings.min_lead_minutes} minutes`
-    : `${Math.round(settings.min_lead_minutes / 60)} hour${settings.min_lead_minutes === 60 ? "" : "s"}`;
-  if (language === "ms") {
-    return error === "too_far"
-      ? `Maaf, kami hanya menerima tempahan sehingga ${settings.max_advance_days} hari lebih awal. Sila pilih tarikh yang lebih dekat.`
-      : `Maaf, tempahan perlu dibuat sekurang-kurangnya ${leadTime} lebih awal. Sila pilih masa yang lebih lewat.`;
+  let state:SafeBookingState={...prior,serviceName:serviceFor(result.object.serviceName,context.services)?.name||prior.serviceName,dateIso:validDate(result.object.dateIso)||prior.dateIso,time24h:validTime(result.object.time24h)||prior.time24h,customerName:result.object.customerName||prior.customerName,customerPhone:findPhone(message)||prior.customerPhone,language:result.object.language,status:"collecting",lastActiveAt:new Date().toISOString()};
+  if(result.object.intent==="restart")state={language:result.object.language,status:"collecting",lastActiveAt:new Date().toISOString()};
+  let text=result.object.reply;
+  const selectedService=serviceFor(state.serviceName,context.services);
+  const selectedSlot=state.dateIso&&state.time24h&&selectedService ? await checkAvailability(state.dateIso,state.time24h,selectedService,context.settings) : undefined;
+  if(selectedSlot&&!selectedSlot.available){
+    state.status="collecting";
+    result.object.handoff=false;
+    text=selectedSlot.reason==="too_far" ? "Sorry, we only accept bookings up to "+context.settings.max_advance_days+" days in advance. Please choose an earlier date." : selectedSlot.reason==="closed" ? "Sorry, we are closed on that date. Please choose another date." : selectedSlot.reason==="fully_booked" ? "Sorry, that slot is fully booked. Please choose another time or date." : selectedSlot.reason==="outside_hours" ? "That time is outside our operating hours. Please choose another time." : "I couldn't check availability right now. Please try again shortly.";
   }
-  return error === "too_far"
-    ? `Sorry, we only accept bookings up to ${settings.max_advance_days} days in advance. Please choose an earlier date.`
-    : `Sorry, bookings must be made at least ${leadTime} in advance. Please choose a later time.`;
-}
-
-function missingDetail(state: SafeBookingState): "service" | "date" | "time" | "customer" | "phone" | null {
-  if (!state.serviceName) return "service";
-  if (!state.dateIso) return "date";
-  if (!state.time24h) return "time";
-  if (!state.hasCustomerName) return "customer";
-  if (!state.hasPhoneNumber) return "phone";
-  return null;
-}
-
-function questionFor(detail: ReturnType<typeof missingDetail>, services: Service[]): string {
-  if (detail === "service") return `Which service would you like? ${serviceText(services)}`;
-  if (detail === "date") return "What date would you like to book? You can say things like tomorrow, lusa, or 10 October.";
-  if (detail === "time") return "What time would you prefer? Please include the time, such as 8am or 2:30pm.";
-  if (detail === "customer") return "May I have the name for this booking?";
-  if (detail === "phone") return "May I have a Malaysian mobile number for the booking?";
-  return "";
-}
-
-export async function respondToCustomer(message: string, state: SafeBookingState | null): Promise<{ text: string; state: SafeBookingState }> {
-  const previous = state ?? {};
-  const services = await loadServices();
-  const settings = await loadBookingSettings();
-  const safeMessage = redactPhoneNumbers(message);
-  const recentTurns = previous.recentTurns ?? [];
-  const customerHistory = recentTurns.filter((turn) => turn.role === "user");
-
-  const extracted = await generateObject({
-    model: bookingModel,
-    schema: extractionSchema,
-    system: `You extract booking facts for a Malaysian car-wash assistant. Today in Malaysia is ${malaysiaToday()}.
-Understand Malay, Manglish, shorthand, corrections, and replies such as "Full" or "the same time".
-Return only facts explicitly stated or unambiguously implied by the current message.
-Convert dates to YYYY-MM-DD and times to 24-hour HH:MM. For a date without a year, use the next occurrence on or after today.
-Map service shorthand to the closest available service. Available services: ${serviceText(services)}.
-Current booking rules from the live settings: bookings require at least ${settings.min_lead_minutes} minutes' notice and can be made up to ${settings.max_advance_days} days ahead. These rules are authoritative; do not tell the customer a date is bookable if it violates them.
-Classify the customer's language from the current customer message and previous customer messages only. Use "ms" for clearly Malay/Manglish messages; otherwise use "en". Never infer language from an assistant message.
-Do not invent a name, date, time, or service. A phone number is detected locally and is not included in this prompt.`,
-    prompt: `Previous customer messages:\n${customerHistory.map((turn) => turn.content).join("\n") || "(none)"}\n\nCurrent customer message:\n${safeMessage}`,
-    providerOptions: { gateway: { disallowPromptTraining: true } satisfies GatewayProviderOptions },
-  });
-
-  let merged: SafeBookingState = {
-    ...previous,
-    serviceName: canonicalService(extracted.object.serviceName, services) ?? previous.serviceName,
-    dateIso: validDate(extracted.object.dateIso) ?? previous.dateIso,
-    time24h: validTime(extracted.object.time24h) ?? previous.time24h,
-    hasCustomerName: previous.hasCustomerName || extracted.object.hasCustomerName,
-    hasPhoneNumber: previous.hasPhoneNumber || hasMalaysianPhoneNumber(message),
-    language: extracted.object.customerLanguage || previous.language || "en",
-    status: "collecting_details",
-    lastActiveAt: new Date().toISOString(),
-  };
-
-  if (extracted.object.intent === "restart") merged = { status: "collecting_details", lastActiveAt: new Date().toISOString() };
-
-  const missing = missingDetail(merged);
-  const dateError = merged.dateIso && merged.time24h
-    ? bookingDateError(merged.dateIso, merged.time24h, settings)
-    : undefined;
-  let text: string;
-  if (extracted.object.intent === "cancel") {
-    text = "I can help with that, but I won’t cancel anything without checking which confirmed booking you mean. Which booking would you like me to review?";
-  } else if (extracted.object.intent === "reschedule") {
-    text = "I can help review a reschedule, but I won’t change a confirmed booking without your confirmation. Which booking should I check?";
-  } else if (dateError) {
-    merged.dateIso = undefined;
-    merged.time24h = undefined;
-    merged.status = "collecting_details";
-    text = bookingDateErrorText(dateError, settings, merged.language ?? "en");
-  } else if (merged.serviceName && merged.dateIso && merged.time24h) {
-    const service = services.find((item) => item.name === merged.serviceName);
-    const availability = service ? await checkAvailability(merged.dateIso, merged.time24h, service, settings) : { available: false, reason: "unavailable" as const };
-    merged.slotAvailable = availability.available;
-    if (!availability.available) {
-      const unavailableText = merged.language === "ms"
-        ? availability.reason === "outside_hours" ? "Masa itu di luar waktu operasi kami. Sila pilih masa lain." : availability.reason === "closed" ? "Maaf, kami tutup pada tarikh itu. Sila pilih tarikh lain." : availability.reason === "fully_booked" ? "Maaf, slot itu sudah penuh. Sila pilih masa atau tarikh lain." : "Maaf, saya tidak dapat menyemak ketersediaan sekarang. Sila cuba sebentar lagi."
-        : availability.reason === "outside_hours" ? "That time is outside our operating hours. Please choose another time." : availability.reason === "closed" ? "Sorry, we are closed on that date. Please choose another date." : availability.reason === "fully_booked" ? "Sorry, that slot is fully booked. Please choose another time or date." : "Sorry, I could not check availability right now. Please try again shortly.";
-      text = unavailableText;
-    } else if (missing) {
-      const reply = await generateText({
-        model: bookingModel,
-        system: `You are WashPoint, a concise Malaysian car-wash booking assistant.
-Use English by default. Use Malay/Manglish only when the customer's messages are clearly Malay/Manglish. Never switch language because an assistant message used Malay.
-The requested slot has been confirmed available. The booking is not confirmed.
-The application has already merged the customer's facts. Never ask for a field present in this draft.
-Ask exactly one focused next question. Booking draft: ${JSON.stringify({ service: merged.serviceName, date: merged.dateIso, time: merged.time24h })}
-Current customer language: ${merged.language === "ms" ? "Malay/Manglish" : "English"}.
-Fallback next question: ${questionFor(missing, services)}`,
-        prompt: safeMessage,
-        providerOptions: { gateway: { disallowPromptTraining: true } satisfies GatewayProviderOptions },
-        maxOutputTokens: 220,
-      });
-      text = reply.text || questionFor(missing, services);
-    } else {
-      text = `Good news — ${merged.serviceName} on ${merged.dateIso} at ${merged.time24h} is available. Shall I proceed? Please reply yes or no.`;
-    }
-  } else if (missing) {
-    const reply = await generateText({
-      model: bookingModel,
-      system: `You are WashPoint, a concise Malaysian car-wash booking assistant.
-Use English by default. Use Malay/Manglish only when the customer's messages are clearly Malay/Manglish. Never switch language because an assistant message used Malay.
-The booking is not confirmed.
-The application has already merged the customer's facts. Never ask for a field present in this draft.
-Ask exactly one focused next question. Booking draft: ${JSON.stringify({ service: merged.serviceName, date: merged.dateIso, time: merged.time24h })}
-Live booking rules: minimum notice ${settings.min_lead_minutes} minutes; maximum advance ${settings.max_advance_days} days.
-Current customer language: ${merged.language === "ms" ? "Malay/Manglish" : "English"}.
-Fallback next question: ${questionFor(missing, services)}`,
-      prompt: safeMessage,
-      providerOptions: { gateway: { disallowPromptTraining: true } satisfies GatewayProviderOptions },
-      maxOutputTokens: 220,
-    });
-    text = reply.text || questionFor(missing, services);
-  } else {
-    merged.status = "awaiting_confirmation";
-    text = `I have the booking details as ${merged.serviceName} on ${merged.dateIso} at ${merged.time24h}. Shall I proceed with this booking? Please reply yes or no.`;
-  }
-
-  console.info("[booking-agent] decision", {
-    intent: extracted.object.intent,
-    language: merged.language ?? "en",
-    service: merged.serviceName,
-    date: merged.dateIso,
-    time: merged.time24h,
-    missing: missingDetail(merged),
-    dateError,
-    status: merged.status,
-  });
-
-  merged.recentTurns = [...recentTurns, { role: "user", content: safeMessage }, { role: "assistant", content: redactPhoneNumbers(text) }].slice(-8) as ConversationTurn[];
-  return { text, state: merged };
+  if(result.object.handoff&&state.serviceName&&state.dateIso&&state.time24h&&state.customerName&&state.customerPhone){state.status="completed";text=await submitBooking(state,context,chatId);}
+  console.info("[booking-agent] luna decision",{intent:result.object.intent,language:state.language,service:state.serviceName,date:state.dateIso,time:state.time24h,hasName:Boolean(state.customerName),hasPhone:Boolean(state.customerPhone),handoff:result.object.handoff,status:state.status});
+  state.recentTurns=[...turns,{role:"user",content:safe},{role:"assistant",content:redact(text)}].slice(-10);
+  return {text:text||"What would you like to book?",state};
 }

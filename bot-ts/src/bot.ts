@@ -27,7 +27,7 @@ export const bot = new Chat({
 
 bot.onDirectMessage(async (thread, message) => {
   const state = (await thread.state) as SafeBookingState | null;
-  const response = await respondToCustomer(message.text, state);
+  const response = await respondToCustomer(message.text, state, thread.id);
   await thread.setState(response.state);
   await thread.post(response.text);
 });
