@@ -14,6 +14,7 @@ export type SafeBookingState = {
   hasCustomerName?: boolean;
   hasPhoneNumber?: boolean;
   language?: "en" | "ms";
+  slotAvailable?: boolean;
   status?: "collecting_details" | "awaiting_confirmation" | "completed";
   recentTurns?: ConversationTurn[];
   lastActiveAt?: string;
@@ -32,6 +33,11 @@ type Service = { name: string; duration_minutes: number; price_myr: number };
 type BookingSettings = {
   min_lead_minutes: number;
   max_advance_days: number;
+  buffer_minutes: number;
+  weekday_open: string;
+  weekday_close: string;
+  weekend_open: string;
+  weekend_close: string;
 };
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -52,11 +58,11 @@ async function loadServices(): Promise<Service[]> {
 }
 
 async function loadBookingSettings(): Promise<BookingSettings> {
-  const fallback = { min_lead_minutes: 60, max_advance_days: 14 };
+  const fallback = { min_lead_minutes: 60, max_advance_days: 14, buffer_minutes: 15, weekday_open: "08:00", weekday_close: "19:00", weekend_open: "08:00", weekend_close: "21:00" };
   if (!supabase) return fallback;
   const { data, error } = await supabase
     .from("booking_settings")
-    .select("min_lead_minutes,max_advance_days")
+    .select("min_lead_minutes,max_advance_days,buffer_minutes,weekday_open,weekday_close,weekend_open,weekend_close")
     .eq("id", 1)
     .maybeSingle();
   if (error || !data) {
@@ -66,7 +72,76 @@ async function loadBookingSettings(): Promise<BookingSettings> {
   return {
     min_lead_minutes: Number(data.min_lead_minutes) || fallback.min_lead_minutes,
     max_advance_days: Number(data.max_advance_days) || fallback.max_advance_days,
+    buffer_minutes: Number(data.buffer_minutes) || fallback.buffer_minutes,
+    weekday_open: data.weekday_open || fallback.weekday_open,
+    weekday_close: data.weekday_close || fallback.weekday_close,
+    weekend_open: data.weekend_open || fallback.weekend_open,
+    weekend_close: data.weekend_close || fallback.weekend_close,
   };
+}
+
+type Availability = { available: boolean; reason?: "closed" | "outside_hours" | "fully_booked" | "unavailable" };
+
+function timeMinutes(value: string): number {
+  const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+async function checkAvailability(dateIso: string, time24h: string, service: Service, settings: BookingSettings): Promise<Availability> {
+  if (!supabase) return { available: false, reason: "unavailable" };
+  const requested = new Date(`${dateIso}T${time24h}:00+08:00`);
+  // Use noon so the UTC conversion cannot move the date into the previous day.
+  const day = new Date(`${dateIso}T12:00:00+08:00`).getUTCDay();
+  const weekend = day === 0 || day === 6;
+  const open = weekend ? settings.weekend_open : settings.weekday_open;
+  const close = weekend ? settings.weekend_close : settings.weekday_close;
+  const requestedMinutes = timeMinutes(time24h);
+  if (requestedMinutes < timeMinutes(open) || requestedMinutes + service.duration_minutes > timeMinutes(close)) {
+    return { available: false, reason: "outside_hours" };
+  }
+
+  const dayStart = `${dateIso}T00:00:00+08:00`;
+  const dayEnd = `${dateIso}T23:59:59+08:00`;
+  const [baysResult, appointmentsResult, breaksResult, closuresResult, blackoutResult] = await Promise.all([
+    supabase.from("bays").select("id").eq("is_active", true).eq("status", "open"),
+    supabase.from("appointments").select("bay_id,scheduled_at,duration_minutes").neq("status", "cancelled").gte("scheduled_at", dayStart).lte("scheduled_at", dayEnd),
+    supabase.from("crew_break_schedule").select("bay_id,start_time,duration_minutes"),
+    supabase.from("bay_closures").select("bay_id,starts_at,ends_at").lte("starts_at", dayEnd).gte("ends_at", dayStart),
+    supabase.from("blackout_dates").select("label").eq("date", dateIso),
+  ]);
+  if ([baysResult, appointmentsResult, breaksResult, closuresResult, blackoutResult].some((result) => result.error)) {
+    console.warn("[booking-agent] availability lookup failed", {
+      errors: [baysResult, appointmentsResult, breaksResult, closuresResult, blackoutResult].map((result) => result.error?.message).filter(Boolean),
+    });
+    return { available: false, reason: "unavailable" };
+  }
+  if ((blackoutResult.data ?? []).length > 0) return { available: false, reason: "closed" };
+
+  const requestedStart = requested.getTime();
+  const requestedEnd = requestedStart + service.duration_minutes * 60_000;
+  const buffer = settings.buffer_minutes * 60_000;
+  const bays = (baysResult.data ?? []) as { id: string }[];
+  const appointments = (appointmentsResult.data ?? []) as { bay_id: string; scheduled_at: string; duration_minutes: number }[];
+  const breaks = (breaksResult.data ?? []) as { bay_id: string; start_time: string; duration_minutes: number }[];
+  const closures = (closuresResult.data ?? []) as { bay_id: string; starts_at: string; ends_at: string }[];
+
+  const hasOverlap = (start: number, end: number, otherStart: number, otherEnd: number) => start < otherEnd && otherStart < end;
+  const freeBay = bays.some((bay) => {
+    const appointmentConflict = appointments.some((appointment) => {
+      if (appointment.bay_id !== bay.id) return false;
+      const start = new Date(appointment.scheduled_at).getTime();
+      return hasOverlap(requestedStart, requestedEnd, start, start + appointment.duration_minutes * 60_000 + buffer);
+    });
+    if (appointmentConflict) return false;
+    const breakConflict = breaks.some((item) => {
+      if (item.bay_id !== bay.id) return false;
+      const start = new Date(`${dateIso}T${item.start_time.slice(0, 5)}:00+08:00`).getTime();
+      return hasOverlap(requestedStart, requestedEnd, start, start + item.duration_minutes * 60_000);
+    });
+    if (breakConflict) return false;
+    return !closures.some((closure) => closure.bay_id === bay.id && hasOverlap(requestedStart, requestedEnd, new Date(closure.starts_at).getTime(), new Date(closure.ends_at).getTime()));
+  });
+  return freeBay ? { available: true } : { available: false, reason: "fully_booked" };
 }
 
 function malaysiaToday(): string {
@@ -195,6 +270,33 @@ Do not invent a name, date, time, or service. A phone number is detected locally
     merged.time24h = undefined;
     merged.status = "collecting_details";
     text = bookingDateErrorText(dateError, settings, merged.language ?? "en");
+  } else if (merged.serviceName && merged.dateIso && merged.time24h) {
+    const service = services.find((item) => item.name === merged.serviceName);
+    const availability = service ? await checkAvailability(merged.dateIso, merged.time24h, service, settings) : { available: false, reason: "unavailable" as const };
+    merged.slotAvailable = availability.available;
+    if (!availability.available) {
+      const unavailableText = merged.language === "ms"
+        ? availability.reason === "outside_hours" ? "Masa itu di luar waktu operasi kami. Sila pilih masa lain." : availability.reason === "closed" ? "Maaf, kami tutup pada tarikh itu. Sila pilih tarikh lain." : availability.reason === "fully_booked" ? "Maaf, slot itu sudah penuh. Sila pilih masa atau tarikh lain." : "Maaf, saya tidak dapat menyemak ketersediaan sekarang. Sila cuba sebentar lagi."
+        : availability.reason === "outside_hours" ? "That time is outside our operating hours. Please choose another time." : availability.reason === "closed" ? "Sorry, we are closed on that date. Please choose another date." : availability.reason === "fully_booked" ? "Sorry, that slot is fully booked. Please choose another time or date." : "Sorry, I could not check availability right now. Please try again shortly.";
+      text = unavailableText;
+    } else if (missing) {
+      const reply = await generateText({
+        model: bookingModel,
+        system: `You are WashPoint, a concise Malaysian car-wash booking assistant.
+Use English by default. Use Malay/Manglish only when the customer's messages are clearly Malay/Manglish. Never switch language because an assistant message used Malay.
+The requested slot has been confirmed available. The booking is not confirmed.
+The application has already merged the customer's facts. Never ask for a field present in this draft.
+Ask exactly one focused next question. Booking draft: ${JSON.stringify({ service: merged.serviceName, date: merged.dateIso, time: merged.time24h })}
+Current customer language: ${merged.language === "ms" ? "Malay/Manglish" : "English"}.
+Fallback next question: ${questionFor(missing, services)}`,
+        prompt: safeMessage,
+        providerOptions: { gateway: { disallowPromptTraining: true } satisfies GatewayProviderOptions },
+        maxOutputTokens: 220,
+      });
+      text = reply.text || questionFor(missing, services);
+    } else {
+      text = `Good news — ${merged.serviceName} on ${merged.dateIso} at ${merged.time24h} is available. Shall I proceed? Please reply yes or no.`;
+    }
   } else if (missing) {
     const reply = await generateText({
       model: bookingModel,
