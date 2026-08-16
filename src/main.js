@@ -200,11 +200,12 @@ async function pageStaffBoard(dateISO) {
   const date = dateISO || localDateISO(new Date());
   const isToday = date === localDateISO(new Date());
 
-  const [bays, appts, settings, breaks] = await Promise.all([
+  const [bays, appts, settings, breaks, closures] = await Promise.all([
     api.getActiveBays(),
     api.getAppointmentsForDate(date),
     api.getBookingSettings(),
     api.getCrewBreaks(),
+    api.getBayClosuresForDate(date),
   ]);
   if (myGen !== renderGen) return;
 
@@ -217,6 +218,8 @@ async function pageStaffBoard(dateISO) {
   for (const a of appts) (byBay[a.bay_id] ??= []).push(a);
   const breaksByBay = {};
   for (const b of breaks) (breaksByBay[b.bay_id] ??= []).push(b);
+  const closuresByBay = {};
+  for (const c of closures) (closuresByBay[c.bay_id] ??= []).push(c);
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
 
@@ -232,8 +235,13 @@ async function pageStaffBoard(dateISO) {
 
   const heads = bays.map(b => {
     const bookings = byBay[b.id] || [];
+    const bayClosures = closuresByBay[b.id] || [];
     let tag = 'Open', tagClass = '';
-    if (isToday) {
+    if (b.status === 'maintenance') {
+      tag = 'Down'; tagClass = 'busy';
+    } else if (bayClosures.length) {
+      tag = 'Down during outage'; tagClass = 'busy';
+    } else if (isToday) {
       const avail = bayAvailability(bookings, settings.buffer_minutes, now);
       if (avail.free) tag = avail.until ? `Free until ${fmtTime(avail.until)}` : 'Free all day';
       else { tag = `Busy until ${fmtTime(avail.until)}`; tagClass = 'busy'; }
@@ -243,6 +251,7 @@ async function pageStaffBoard(dateISO) {
 
   const tracks = bays.map(b => {
     const bookings = byBay[b.id] || [];
+    const bayClosures = closuresByBay[b.id] || [];
     const apptBlocks = bookings.map(a => {
       const start = new Date(a.scheduled_at);
       const startMin = start.getHours() * 60 + start.getMinutes();
@@ -262,7 +271,18 @@ async function pageStaffBoard(dateISO) {
         <div class="t1">Crew break</div>
       </div>`;
     }).join('');
-    return `<div class="cal-col-track">${hourLines}${breakBlocks}${apptBlocks}${isToday ? nowLine : ''}</div>`;
+    const closureBlocks = bayClosures.map(c => {
+      const start = new Date(c.starts_at);
+      const end = new Date(c.ends_at);
+      const top = Math.max(dayStart, start.getHours() * 60 + start.getMinutes()) - dayStart;
+      const bottom = Math.min(dayEnd, end.getHours() * 60 + end.getMinutes()) - dayStart;
+      const height = Math.max(24, bottom - top);
+      return `<div class="cal-block cal-closure" style="top:${top}px;height:${height}px" data-closure="${c.id}">
+        <div class="t1">Bay down</div>
+        <div class="t2">${fmtTime(start)}–${fmtTime(end)}${c.reason ? ` · ${c.reason}` : ''}</div>
+      </div>`;
+    }).join('');
+    return `<div class="cal-col-track">${hourLines}${closureBlocks}${breakBlocks}${apptBlocks}${isToday ? nowLine : ''}</div>`;
   }).join('');
 
   app.innerHTML = shell('board', `
@@ -282,7 +302,7 @@ async function pageStaffBoard(dateISO) {
         ${tracks}
       </div>
     </div>
-    ${staff.role === 'owner' ? `<div class="settings-row" style="margin-top:14px">${bays.map(b => `<button class="mini-btn" data-report="${b.id}">Report ${b.name} down</button>`).join('')}</div>` : ''}
+    ${staff.role === 'owner' ? `<div class="settings-row" style="margin-top:14px">${bays.map(b => { if (b.status === 'maintenance') return `<button class="mini-btn" data-bring-up="${b.id}">Bring ${b.name} back online</button>`; const outage = (closuresByBay[b.id] || []).find(c => new Date(c.ends_at) > new Date()); return outage ? `<button class="mini-btn" data-clear-closure="${outage.id}">End ${b.name} outage</button>` : `<button class="mini-btn" data-report="${b.id}">Report ${b.name} down</button>`; }).join('')}</div>` : ''}
   `);
   document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => pageStaffBoard(el.dataset.date));
   document.querySelectorAll('[data-appt]').forEach(el => el.onclick = () => {
@@ -290,14 +310,92 @@ async function pageStaffBoard(dateISO) {
     if (a) showApptModal(a);
   });
   document.querySelectorAll('[data-report]').forEach(el => el.onclick = async () => {
-    const res = await api.reportBayDown(el.dataset.report);
+    const values = await bayDownDetails(el.dataset.report, date);
+    if (!values) return;
+    const res = await api.reportBayDown(el.dataset.report, values);
     if (myGen !== renderGen) return;
-    alert(`Bay marked down. ${res.flagged ?? 0} booking(s) need attention.`);
+    alert(`Bay outage recorded. ${res.flagged ?? 0} booking(s) were checked for reassignment.`);
+    pageStaffBoard(date);
+  });
+  document.querySelectorAll('[data-bring-up]').forEach(el => el.onclick = async () => {
+    await api.bringBayUp(el.dataset.bringUp);
+    if (myGen !== renderGen) return;
+    pageStaffBoard(date);
+  });
+  document.querySelectorAll('[data-closure], [data-clear-closure]').forEach(el => el.onclick = async () => {
+    if (!confirm('End this bay outage early?')) return;
+    await api.clearBayClosure(el.dataset.closure || el.dataset.clearClosure);
+    if (myGen !== renderGen) return;
     pageStaffBoard(date);
   });
   wireNav();
 }
 
+function localDateTimeValue(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function timeOptions(selected) {
+  let html = '';
+  for (let mins = 0; mins < 24 * 60; mins += 15) {
+    const h = String(Math.floor(mins / 60)).padStart(2, '0');
+    const m = String(mins % 60).padStart(2, '0');
+    const value = `${h}:${m}`;
+    const label = new Date(`2000-01-01T${value}`).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    html += `<option value="${value}" ${value === selected ? 'selected' : ''}>${label}</option>`;
+  }
+  return html;
+}
+
+async function bayDownDetails(bayId, dateISO) {
+  const now = new Date();
+  const startDate = dateISO === localDateISO(now) ? new Date(now) : new Date(`${dateISO}T08:00`);
+  startDate.setMinutes(Math.ceil(startDate.getMinutes() / 15) * 15, 0, 0);
+  const endDate = new Date(startDate.getTime() + 60 * 60000);
+  const pad = n => String(n).padStart(2, '0');
+  const dateValue = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const timeValue = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-card outage-modal">
+        <h3>Report bay down</h3>
+        <p class="lead">Choose exactly when this bay is unavailable. Existing bookings in this window will be checked.</p>
+        <div class="field"><label>Starts</label><div class="outage-datetime">
+          <input id="outageStartDate" type="date" value="${dateValue(startDate)}">
+          <select id="outageStartTime">${timeOptions(timeValue(startDate))}</select>
+        </div></div>
+        <div class="field"><label>Ends</label><div class="outage-datetime">
+          <input id="outageEndDate" type="date" value="${dateValue(endDate)}">
+          <select id="outageEndTime">${timeOptions(timeValue(endDate))}</select>
+        </div></div>
+        <div class="field"><label>Reason <span class="muted">(optional)</span></label>
+          <input id="outageReason" placeholder="e.g. pressure washer repair">
+        </div>
+        <div class="settings-row">
+          <button class="btn ghost" id="cancelOutage" type="button">Cancel</button>
+          <button class="btn amber" id="saveOutage" type="button">Save outage</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const close = value => { overlay.remove(); resolve(value); };
+    overlay.onclick = e => { if (e.target === overlay) close(null); };
+    overlay.querySelector('#cancelOutage').onclick = () => close(null);
+    overlay.querySelector('#saveOutage').onclick = () => {
+      const start = new Date(`${overlay.querySelector('#outageStartDate').value}T${overlay.querySelector('#outageStartTime').value}`);
+      const end = new Date(`${overlay.querySelector('#outageEndDate').value}T${overlay.querySelector('#outageEndTime').value}`);
+      if (!overlay.querySelector('#outageStartDate').value || !overlay.querySelector('#outageEndDate').value || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+        alert('Please choose a valid window with the end after the start.');
+        return;
+      }
+      close({ startsAt: start.toISOString(), endsAt: end.toISOString(), reason: overlay.querySelector('#outageReason').value.trim() });
+    };
+  });
+}
 async function pageStaffSettings() {
   const myGen = ++renderGen;
   const staff = await requireStaff(myGen);
