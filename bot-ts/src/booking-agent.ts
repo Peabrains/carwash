@@ -13,6 +13,7 @@ export type SafeBookingState = {
   time24h?: string;
   hasCustomerName?: boolean;
   hasPhoneNumber?: boolean;
+  language?: "en" | "ms";
   status?: "collecting_details" | "awaiting_confirmation" | "completed";
   recentTurns?: ConversationTurn[];
   lastActiveAt?: string;
@@ -24,9 +25,14 @@ const extractionSchema = z.object({
   dateIso: z.string().nullable(),
   time24h: z.string().nullable(),
   hasCustomerName: z.boolean(),
+  customerLanguage: z.enum(["en", "ms"]),
 });
 
 type Service = { name: string; duration_minutes: number; price_myr: number };
+type BookingSettings = {
+  min_lead_minutes: number;
+  max_advance_days: number;
+};
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
@@ -43,6 +49,24 @@ async function loadServices(): Promise<Service[]> {
   if (!supabase) return [];
   const { data, error } = await supabase.from("services").select("name,duration_minutes,price_myr").eq("is_active", true).order("name");
   return error ? [] : (data ?? []) as Service[];
+}
+
+async function loadBookingSettings(): Promise<BookingSettings> {
+  const fallback = { min_lead_minutes: 60, max_advance_days: 14 };
+  if (!supabase) return fallback;
+  const { data, error } = await supabase
+    .from("booking_settings")
+    .select("min_lead_minutes,max_advance_days")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error || !data) {
+    console.warn("[booking-agent] booking settings unavailable; using safe defaults", { error: error?.message });
+    return fallback;
+  }
+  return {
+    min_lead_minutes: Number(data.min_lead_minutes) || fallback.min_lead_minutes,
+    max_advance_days: Number(data.max_advance_days) || fallback.max_advance_days,
+  };
 }
 
 function malaysiaToday(): string {
@@ -71,6 +95,37 @@ function validTime(value: string | null): string | undefined {
   return value && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : undefined;
 }
 
+function dateAtMalaysiaMidnight(dateIso: string): Date {
+  return new Date(`${dateIso}T00:00:00+08:00`);
+}
+
+function bookingDateError(dateIso: string, time24h: string, settings: BookingSettings): "too_early" | "too_far" | undefined {
+  const requested = new Date(`${dateIso}T${time24h}:00+08:00`);
+  if (Number.isNaN(requested.getTime())) return undefined;
+
+  const now = new Date();
+  if (requested.getTime() < now.getTime() + settings.min_lead_minutes * 60_000) return "too_early";
+
+  const latestDate = dateAtMalaysiaMidnight(malaysiaToday());
+  latestDate.setUTCDate(latestDate.getUTCDate() + settings.max_advance_days);
+  if (dateAtMalaysiaMidnight(dateIso).getTime() > latestDate.getTime()) return "too_far";
+  return undefined;
+}
+
+function bookingDateErrorText(error: "too_early" | "too_far", settings: BookingSettings, language: "en" | "ms"): string {
+  const leadTime = settings.min_lead_minutes < 60
+    ? `${settings.min_lead_minutes} minutes`
+    : `${Math.round(settings.min_lead_minutes / 60)} hour${settings.min_lead_minutes === 60 ? "" : "s"}`;
+  if (language === "ms") {
+    return error === "too_far"
+      ? `Maaf, kami hanya menerima tempahan sehingga ${settings.max_advance_days} hari lebih awal. Sila pilih tarikh yang lebih dekat.`
+      : `Maaf, tempahan perlu dibuat sekurang-kurangnya ${leadTime} lebih awal. Sila pilih masa yang lebih lewat.`;
+  }
+  return error === "too_far"
+    ? `Sorry, we only accept bookings up to ${settings.max_advance_days} days in advance. Please choose an earlier date.`
+    : `Sorry, bookings must be made at least ${leadTime} in advance. Please choose a later time.`;
+}
+
 function missingDetail(state: SafeBookingState): "service" | "date" | "time" | "customer" | "phone" | null {
   if (!state.serviceName) return "service";
   if (!state.dateIso) return "date";
@@ -92,8 +147,10 @@ function questionFor(detail: ReturnType<typeof missingDetail>, services: Service
 export async function respondToCustomer(message: string, state: SafeBookingState | null): Promise<{ text: string; state: SafeBookingState }> {
   const previous = state ?? {};
   const services = await loadServices();
+  const settings = await loadBookingSettings();
   const safeMessage = redactPhoneNumbers(message);
   const recentTurns = previous.recentTurns ?? [];
+  const customerHistory = recentTurns.filter((turn) => turn.role === "user");
 
   const extracted = await generateObject({
     model: bookingModel,
@@ -103,8 +160,10 @@ Understand Malay, Manglish, shorthand, corrections, and replies such as "Full" o
 Return only facts explicitly stated or unambiguously implied by the current message.
 Convert dates to YYYY-MM-DD and times to 24-hour HH:MM. For a date without a year, use the next occurrence on or after today.
 Map service shorthand to the closest available service. Available services: ${serviceText(services)}.
+Current booking rules from the live settings: bookings require at least ${settings.min_lead_minutes} minutes' notice and can be made up to ${settings.max_advance_days} days ahead. These rules are authoritative; do not tell the customer a date is bookable if it violates them.
+Classify the customer's language from the current customer message and previous customer messages only. Use "ms" for clearly Malay/Manglish messages; otherwise use "en". Never infer language from an assistant message.
 Do not invent a name, date, time, or service. A phone number is detected locally and is not included in this prompt.`,
-    prompt: `Recent conversation:\n${recentTurns.map((turn) => `${turn.role}: ${turn.content}`).join("\n") || "(none)"}\n\nCurrent customer message:\n${safeMessage}`,
+    prompt: `Previous customer messages:\n${customerHistory.map((turn) => turn.content).join("\n") || "(none)"}\n\nCurrent customer message:\n${safeMessage}`,
     providerOptions: { gateway: { disallowPromptTraining: true } satisfies GatewayProviderOptions },
   });
 
@@ -115,6 +174,7 @@ Do not invent a name, date, time, or service. A phone number is detected locally
     time24h: validTime(extracted.object.time24h) ?? previous.time24h,
     hasCustomerName: previous.hasCustomerName || extracted.object.hasCustomerName,
     hasPhoneNumber: previous.hasPhoneNumber || hasMalaysianPhoneNumber(message),
+    language: extracted.object.customerLanguage || previous.language || "en",
     status: "collecting_details",
     lastActiveAt: new Date().toISOString(),
   };
@@ -122,18 +182,29 @@ Do not invent a name, date, time, or service. A phone number is detected locally
   if (extracted.object.intent === "restart") merged = { status: "collecting_details", lastActiveAt: new Date().toISOString() };
 
   const missing = missingDetail(merged);
+  const dateError = merged.dateIso && merged.time24h
+    ? bookingDateError(merged.dateIso, merged.time24h, settings)
+    : undefined;
   let text: string;
   if (extracted.object.intent === "cancel") {
     text = "I can help with that, but I won’t cancel anything without checking which confirmed booking you mean. Which booking would you like me to review?";
   } else if (extracted.object.intent === "reschedule") {
     text = "I can help review a reschedule, but I won’t change a confirmed booking without your confirmation. Which booking should I check?";
+  } else if (dateError) {
+    merged.dateIso = undefined;
+    merged.time24h = undefined;
+    merged.status = "collecting_details";
+    text = bookingDateErrorText(dateError, settings, merged.language ?? "en");
   } else if (missing) {
     const reply = await generateText({
       model: bookingModel,
       system: `You are WashPoint, a concise Malaysian car-wash booking assistant.
-Respond naturally in the customer's language. The booking is not confirmed.
+Use English by default. Use Malay/Manglish only when the customer's messages are clearly Malay/Manglish. Never switch language because an assistant message used Malay.
+The booking is not confirmed.
 The application has already merged the customer's facts. Never ask for a field present in this draft.
 Ask exactly one focused next question. Booking draft: ${JSON.stringify({ service: merged.serviceName, date: merged.dateIso, time: merged.time24h })}
+Live booking rules: minimum notice ${settings.min_lead_minutes} minutes; maximum advance ${settings.max_advance_days} days.
+Current customer language: ${merged.language === "ms" ? "Malay/Manglish" : "English"}.
 Fallback next question: ${questionFor(missing, services)}`,
       prompt: safeMessage,
       providerOptions: { gateway: { disallowPromptTraining: true } satisfies GatewayProviderOptions },
@@ -144,6 +215,17 @@ Fallback next question: ${questionFor(missing, services)}`,
     merged.status = "awaiting_confirmation";
     text = `I have the booking details as ${merged.serviceName} on ${merged.dateIso} at ${merged.time24h}. Shall I proceed with this booking? Please reply yes or no.`;
   }
+
+  console.info("[booking-agent] decision", {
+    intent: extracted.object.intent,
+    language: merged.language ?? "en",
+    service: merged.serviceName,
+    date: merged.dateIso,
+    time: merged.time24h,
+    missing: missingDetail(merged),
+    dateError,
+    status: merged.status,
+  });
 
   merged.recentTurns = [...recentTurns, { role: "user", content: safeMessage }, { role: "assistant", content: redactPhoneNumbers(text) }].slice(-8) as ConversationTurn[];
   return { text, state: merged };
