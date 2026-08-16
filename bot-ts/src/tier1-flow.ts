@@ -85,19 +85,20 @@ export async function startTier1(thread: Thread) {
   const value: Tier1State = { step: "service", lastActiveAt: new Date().toISOString() };
   await thread.setState(value);
   const c = await context();
-  await thread.post(menu("WashPoint — Book a wash", "Choose a service:", c.services.slice(0, 8).map((s, index) => ({ id: "t1_service", label: s.name, value: String(index) }))));
+  const services = c.services.slice(0, 8);
+  await thread.post(menu("WashPoint — Book a wash", `Choose a service:\n${services.map(serviceLabel).join("\n")}`, services.map((s, index) => ({ id: "t1_service", label: s.name.replace(/\s+(Wash|Detail)$/i, "").slice(0, 12), value: String(index) }))));
 }
 
 export async function startTier1Channel(channel: Channel) {
   const c = await context();
-  await channel.post(menu("WashPoint — Book a wash", "Choose a service:", c.services.slice(0, 8).map((s, index) => ({ id: "t1_service", label: s.name, value: String(index) }))));
+  const services = c.services.slice(0, 8);
+  await channel.post(menu("WashPoint — Book a wash", `Choose a service:\n${services.map(serviceLabel).join("\n")}`, services.map((s, index) => ({ id: "t1_service", label: s.name.replace(/\s+(Wash|Detail)$/i, "").slice(0, 12), value: String(index) }))));
 }
 
 export async function handleTier1Action(thread: Thread, actionId: string, value?: string) {
   const c = await context(); const state = ((await thread.state) as Tier1State | null) ?? { step: "service" };
   if (actionId === "t1_restart") return startTier1(thread);
   if (actionId === "t1_service" && value) {
-    if (state.step !== "service") return thread.post("That menu has expired. Please send /start to begin again.");
     const s = c.services[Number(value)]; if (!s) return startTier1(thread);
     const dates = Array.from({ length: Math.min(c.settings.max_advance_days + 1, 14) }, (_, i) => addDays(localDate(), i));
     const usable = (await Promise.all(dates.map(async date => ({ date, slots: await available(c, date, s) })))).filter(x => x.slots.length);
