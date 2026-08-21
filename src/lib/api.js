@@ -1,4 +1,6 @@
 import { supabase, isConfigured } from './supabase.js';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { firebaseConfigured, firestore } from './firebase.js';
 
 // ── Mock data used until a real Supabase project is connected ──────────
 const MOCK_SERVICES = [
@@ -20,6 +22,14 @@ const MOCK_SETTINGS = {
 };
 
 export async function getServices() {
+  if (firebaseConfigured) {
+    try {
+      const snapshot = await getDocs(query(collection(firestore, 'services'), where('is_active', '==', true)));
+      if (!snapshot.empty) return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.warn('Firebase catalogue unavailable; using the existing data source during migration.', error);
+    }
+  }
   if (!isConfigured) return MOCK_SERVICES;
   const { data, error } = await supabase.from('services').select('*').eq('is_active', true);
   if (error) throw error;
@@ -27,6 +37,14 @@ export async function getServices() {
 }
 
 export async function getActiveBays() {
+  if (firebaseConfigured) {
+    try {
+      const snapshot = await getDocs(query(collection(firestore, 'bays'), where('is_active', '==', true)));
+      if (!snapshot.empty) return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.warn('Firebase bays unavailable; using the existing data source during migration.', error);
+    }
+  }
   if (!isConfigured) return MOCK_BAYS.filter(b => b.is_active);
   // Without an explicit order, Postgres doesn't guarantee row order at
   // all — this is why Bay 2 was showing above Bay 1.
@@ -68,6 +86,14 @@ export async function getBayClosuresForDate(dateISO) {
 }
 
 export async function getBookingSettings() {
+  if (firebaseConfigured) {
+    try {
+      const snapshot = await getDoc(doc(firestore, 'booking_settings', 'main'));
+      if (snapshot.exists()) return snapshot.data();
+    } catch (error) {
+      console.warn('Firebase booking settings unavailable; using the existing data source during migration.', error);
+    }
+  }
   if (!isConfigured) return MOCK_SETTINGS;
   const { data, error } = await supabase.from('booking_settings').select('*').eq('id', 1).single();
   if (error) throw error;
