@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithRedirect, signOut } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, getRedirectResult, onAuthStateChanged, signInWithRedirect, signOut } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -29,6 +29,12 @@ export function signInStaffWithGoogle() {
 export async function getFirebaseUser() {
   if (!firebaseAuth) return null;
   return firebaseAuth.currentUser;
+}
+
+export async function finishGoogleRedirect() {
+  if (!firebaseAuth) return null;
+  const result = await getRedirectResult(firebaseAuth);
+  return result?.user ?? firebaseAuth.currentUser;
 }
 
 export function signOutStaff() {

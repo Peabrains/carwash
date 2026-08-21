@@ -60,6 +60,19 @@ async function pageStaffLogin() {
     location.hash = '#/staff/board';
     router();
   });
+  try {
+    const redirectedUser = await api.finishStaffRedirect?.();
+    if (redirectedUser && myGen === renderGen) {
+      stopWatching?.();
+      location.hash = '#/staff/board';
+      router();
+      return;
+    }
+  } catch (e) {
+    const errEl = document.getElementById('errMsg');
+    errEl.textContent = e?.message || 'Google sign-in could not be completed.';
+    errEl.style.display = 'block';
+  }
   document.getElementById('doSignIn').onclick = async () => {
     const errEl = document.getElementById('errMsg');
     errEl.style.display = 'none';
