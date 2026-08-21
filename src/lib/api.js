@@ -1,6 +1,6 @@
 import { supabase, isConfigured } from './supabase.js';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
-import { firebaseConfigured, firestore, getFirebaseUser, signInStaffWithGoogle as firebaseGoogleSignIn, signOutStaff as firebaseSignOut } from './firebase.js';
+import { firebaseConfigured, firestore, getFirebaseUser, signInStaffWithGoogle as firebaseGoogleSignIn, signOutStaff as firebaseSignOut, watchFirebaseUser } from './firebase.js';
 
 // ── Mock data used until a real Supabase project is connected ──────────
 const MOCK_SERVICES = [
@@ -298,4 +298,8 @@ export async function signOutStaff() {
   if (firebaseConfigured) return firebaseSignOut();
   if (!isConfigured) return;
   await supabase.auth.signOut();
+}
+
+export function watchStaffAuth(callback) {
+  return firebaseConfigured ? watchFirebaseUser(callback) : () => {};
 }

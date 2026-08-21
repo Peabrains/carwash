@@ -52,6 +52,14 @@ async function pageStaffLogin() {
     <button class="btn" id="doSignIn">Sign in with Google</button>
     <p class="lead" id="errMsg" style="display:none;color:#b3261e"></p>
   `);
+  // Redirect-based Google sign-in returns to this same route. Once Firebase
+  // restores the session, move the user into the staff portal automatically.
+  const stopWatching = api.watchStaffAuth?.(async (user) => {
+    if (!user || myGen !== renderGen) return;
+    stopWatching();
+    location.hash = '#/staff/board';
+    router();
+  });
   document.getElementById('doSignIn').onclick = async () => {
     const errEl = document.getElementById('errMsg');
     errEl.style.display = 'none';
