@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, getRedirectResult, onAuthStateChanged, signInWithRedirect, signOut } from 'firebase/auth';
+import { browserSessionPersistence, getAuth, GoogleAuthProvider, getRedirectResult, onAuthStateChanged, setPersistence, signInWithRedirect, signOut } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -23,7 +23,8 @@ export const firebaseStorage = firebaseApp ? getStorage(firebaseApp) : null;
 
 export function signInStaffWithGoogle() {
   if (!firebaseAuth) throw new Error('Firebase Authentication is not configured.');
-  return signInWithRedirect(firebaseAuth, googleProvider);
+  return setPersistence(firebaseAuth, browserSessionPersistence)
+    .then(() => signInWithRedirect(firebaseAuth, googleProvider));
 }
 
 export async function getFirebaseUser() {
