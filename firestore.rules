@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isStaff() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/staff/$(request.auth.token.email))
+        && get(/databases/$(database)/documents/staff/$(request.auth.token.email)).data.is_active == true;
+    }
+
+    // These are non-sensitive booking catalogue/configuration values.
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /bays/{bayId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /booking_settings/{settingId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /staff/{email} {
+      allow read: if isStaff() && request.auth.token.email == email;
+      allow write: if isStaff();
+    }
+
+    match /appointments/{appointmentId} {
+      allow read, write: if isStaff();
+    }
+
+    match /blackout_dates/{dateId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /bay_closures/{closureId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
