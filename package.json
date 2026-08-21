@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "firebase": "^12.1.0",
+    "firebase-admin": "^13.4.0",
     "@supabase/supabase-js": "^2.45.4"
   },
   "devDependencies": {

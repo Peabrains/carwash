@@ -1,4 +1,6 @@
 import { supabase, isConfigured } from './supabase.js';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { firestore, firebaseConfigured } from './firebase.js';
 
 // ── Mock data used until a real Supabase project is connected ──────────
 const MOCK_SERVICES = [
@@ -20,6 +22,16 @@ const MOCK_SETTINGS = {
 };
 
 export async function getServices() {
+  // Prefer Firebase once its catalogue has been populated. Until then,
+  // retain the Supabase path so the live app remains usable during migration.
+  if (firebaseConfigured) {
+    try {
+      const snapshot = await getDocs(query(collection(firestore, 'services'), where('is_active', '==', true)));
+      if (!snapshot.empty) return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.warn('Firebase catalogue unavailable; using the existing data source during migration.', error);
+    }
+  }
   if (!isConfigured) return MOCK_SERVICES;
   const { data, error } = await supabase.from('services').select('*').eq('is_active', true);
   if (error) throw error;
@@ -27,6 +39,14 @@ export async function getServices() {
 }
 
 export async function getActiveBays() {
+  if (firebaseConfigured) {
+    try {
+      const snapshot = await getDocs(query(collection(firestore, 'bays'), where('is_active', '==', true)));
+      if (!snapshot.empty) return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.warn('Firebase bays unavailable; using the existing data source during migration.', error);
+    }
+  }
   if (!isConfigured) return MOCK_BAYS.filter(b => b.is_active);
   const { data, error } = await supabase.from('bays').select('*').eq('is_active', true);
   if (error) throw error;
@@ -34,6 +54,14 @@ export async function getActiveBays() {
 }
 
 export async function getBookingSettings() {
+  if (firebaseConfigured) {
+    try {
+      const snapshot = await getDoc(doc(firestore, 'booking_settings', 'main'));
+      if (snapshot.exists()) return snapshot.data();
+    } catch (error) {
+      console.warn('Firebase booking settings unavailable; using the existing data source during migration.', error);
+    }
+  }
   if (!isConfigured) return MOCK_SETTINGS;
   const { data, error } = await supabase.from('booking_settings').select('*').eq('id', 1).single();
   if (error) throw error;
@@ -87,6 +115,22 @@ export async function getAvailableSlots(dateISO, serviceId) {
 export async function createAppointment({ customerId, vehicleId, serviceId, bayId, scheduledAtISO }) {
   const service = (await getServices()).find(s => s.id === serviceId);
   const reference = `WP-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*9000+1000)}`;
+
+  if (firebaseConfigured) {
+    const response = await fetch('/api/appointments', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        customer_id: customerId,
+        vehicle_id: vehicleId,
+        service_id: serviceId,
+        scheduled_at: scheduledAtISO
+      })
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error || 'Unable to create appointment');
+    return body;
+  }
 
   if (!isConfigured) {
     return { id: 'mock', reference, status: 'pending', payment_status: 'unpaid' };

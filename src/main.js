@@ -1,5 +1,6 @@
 import './style.css';
 import { supabase, isConfigured } from './lib/supabase.js';
+import { signInStaffWithGoogle } from './lib/firebase.js';
 import * as api from './lib/api.js';
 
 const app = document.getElementById('app');
@@ -9,6 +10,7 @@ const state = {
   selectedDate: new Date().toISOString().slice(0, 10),
   selectedSlot: null,
   customer: null, // { id, phone }
+  staffUser: null,
 };
 
 function fmtDate(iso) {
@@ -190,7 +192,27 @@ async function pageHistory() {
 }
 
 // ── Staff pages ──────────────────────────────────────────────────────
+function pageStaffLogin() {
+  app.innerHTML = shell('', true, `
+    <div class="eyebrow">Staff access</div>
+    <h2>Sign in to WashPoint</h2>
+    <p class="lead">Use an approved Google account to open the staff dashboard.</p>
+    <button class="btn" id="googleStaff">Continue with Google</button>
+    <p class="lead" id="staffError" style="color:#b44"></p>
+  `);
+  document.getElementById('googleStaff').onclick = async () => {
+    try {
+      const result = await signInStaffWithGoogle();
+      state.staffUser = result.user;
+      location.hash = '#/staff/board';
+    } catch (error) {
+      document.getElementById('staffError').textContent = error.message;
+    }
+  };
+}
+
 async function pageStaffBoard() {
+  if (!state.staffUser) { location.hash = '#/staff/login'; return; }
   const bays = await api.getActiveBays();
   const cols = bays.map(b => `
     <div class="bay-col">
@@ -211,6 +233,7 @@ async function pageStaffBoard() {
 }
 
 async function pageStaffSettings() {
+  if (!state.staffUser) { location.hash = '#/staff/login'; return; }
   const s = await api.getBookingSettings();
   app.innerHTML = shell('', true, `
     <div class="eyebrow">Configuration</div>
@@ -241,6 +264,7 @@ const routes = {
   '#/history': pageHistory,
   '#/staff/board': pageStaffBoard,
   '#/staff/settings': pageStaffSettings,
+  '#/staff/login': pageStaffLogin,
 };
 
 function router() {
