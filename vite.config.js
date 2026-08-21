@@ -7,7 +7,13 @@ export default defineConfig({
   base,
   plugins: [
     VitePWA({
+      selfDestroying: true,
       registerType: 'autoUpdate',
+      workbox: {
+        // Firebase Authentication owns this reserved path. Never let the
+        // PWA navigation fallback replace its OAuth handler with index.html.
+        navigateFallbackDenylist: [/^\/__\/auth\//]
+      },
       manifest: {
         name: 'Wash Point',
         short_name: 'WashPoint',
