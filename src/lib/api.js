@@ -1,6 +1,6 @@
 import { supabase, isConfigured } from './supabase.js';
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
-import { firebaseConfigured, firestore } from './firebase.js';
+import { firebaseConfigured, firestore, getFirebaseUser, signInStaffWithGoogle as firebaseGoogleSignIn, signOutStaff as firebaseSignOut } from './firebase.js';
 
 // ── Mock data used until a real Supabase project is connected ──────────
 const MOCK_SERVICES = [
@@ -264,12 +264,14 @@ export async function removeCrewBreak(id) {
 // mismatch). Fine for a small, known staff list; revisit if self-serve
 // signup for arbitrary users is ever needed.
 export async function signInStaff(email, password) {
+  if (firebaseConfigured) return firebaseGoogleSignIn();
   if (!isConfigured) return { mock: true };
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
 }
 
 export async function getAuthUser() {
+  if (firebaseConfigured) return getFirebaseUser();
   if (!isConfigured) return { id: 'mock-owner' };
   const { data: { user } } = await supabase.auth.getUser();
   return user;
@@ -278,6 +280,12 @@ export async function getAuthUser() {
 // Distinguishes "no session at all" from "signed in but not on the staff
 // list" — the two need different messages/actions in the UI.
 export async function getCurrentStaff() {
+  if (firebaseConfigured) {
+    const user = await getFirebaseUser();
+    if (!user?.email) return null;
+    const snapshot = await getDoc(doc(firestore, 'staff', user.email));
+    return snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
+  }
   if (!isConfigured) return { id: 'mock-owner', role: 'owner', name: 'Mock Owner' };
   const user = await getAuthUser();
   if (!user) return null;
@@ -287,6 +295,7 @@ export async function getCurrentStaff() {
 }
 
 export async function signOutStaff() {
+  if (firebaseConfigured) return firebaseSignOut();
   if (!isConfigured) return;
   await supabase.auth.signOut();
 }

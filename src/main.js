@@ -48,19 +48,15 @@ async function pageStaffLogin() {
   app.innerHTML = shell('', `
     <div class="eyebrow">Staff sign in</div>
     <h2>Wash Point staff</h2>
-    <div class="field"><label>Email</label><input id="email" placeholder="you@example.com"/></div>
-    <div class="field"><label>Password</label><input id="password" type="password"/></div>
-    <button class="btn" id="doSignIn">Sign in</button>
+    <p class="lead">Use your authorized Google account to continue.</p>
+    <button class="btn" id="doSignIn">Sign in with Google</button>
     <p class="lead" id="errMsg" style="display:none;color:#b3261e"></p>
   `);
   document.getElementById('doSignIn').onclick = async () => {
-    const email = document.getElementById('email').value.trim();
-    const password = document.getElementById('password').value;
-    if (!email || !password) return;
     const errEl = document.getElementById('errMsg');
     errEl.style.display = 'none';
     try {
-      await api.signInStaff(email, password);
+      await api.signInStaff();
       if (myGen !== renderGen) return;
       location.hash = '#/staff/board';
       router();

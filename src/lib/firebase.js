@@ -26,6 +26,11 @@ export function signInStaffWithGoogle() {
   return signInWithPopup(firebaseAuth, googleProvider);
 }
 
+export async function getFirebaseUser() {
+  if (!firebaseAuth) return null;
+  return firebaseAuth.currentUser;
+}
+
 export function signOutStaff() {
   return firebaseAuth ? signOut(firebaseAuth) : Promise.resolve();
 }
