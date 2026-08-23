@@ -1,8 +1,7 @@
 import "./env.js";
 import { Chat } from "chat";
-import { createMemoryState } from "@chat-adapter/state-memory";
-import { createPostgresState } from "@chat-adapter/state-pg";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
+import { createFirestoreState } from "./firestore-state.js";
 import { respondToCustomer, type SafeBookingState } from "./booking-agent.js";
 import { transcribeAttachments } from "./transcription.js";
 
@@ -21,9 +20,7 @@ const telegram = createTelegramAdapter({
 export const bot = new Chat({
   userName: "washpoint",
   adapters: { telegram },
-  state: process.env.POSTGRES_URL
-    ? createPostgresState({ url: process.env.POSTGRES_URL })
-    : createMemoryState(),
+  state: createFirestoreState(),
   onLockConflict: "drop",
 });
 
@@ -47,7 +44,7 @@ bot.onDirectMessage(async (thread, message) => {
   const wantsContinue = /^(continue|resume|sambung|teruskan|ya|yes|ok|okay)$/.test(normalized);
   const wantsNewChat = /^(new chat|start new|restart|mula baru|buka baru|new booking)$/.test(normalized);
 
-  if (state?.status !== "completed" && idle && state.status !== "paused") {
+  if (state && state.status !== "completed" && idle && state.status !== "paused") {
     const pausedState = { ...state, status: "paused" as const };
     await thread.setState(pausedState);
     await thread.post("This booking has been paused because the chat was inactive for 5 minutes. Reply *Continue* to resume it, or *New chat* to start over.");

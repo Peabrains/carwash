@@ -4,15 +4,18 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/dev.ts",
+    "migrate:phase1": "tsx scripts/migrate-phase1.ts",
+    "migration:export-firebase": "tsx scripts/export-firebase.ts",
+    "migration:import-supabase": "tsx scripts/import-supabase.ts",
+    "migration:import-auth": "tsx scripts/import-supabase-auth.ts",
+    "test": "tsx --test test/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.52",
-    "@chat-adapter/state-memory": "latest",
-    "@chat-adapter/state-pg": "^4.38.0",
     "@chat-adapter/telegram": "latest",
+    "@supabase/supabase-js": "2.112.3",
     "@vercel/functions": "latest",
-    "@supabase/supabase-js": "latest",
     "ai": "latest",
     "chat": "latest",
     "dotenv": "latest",

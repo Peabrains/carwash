@@ -2,6 +2,11 @@ node_modules
 dist
 .env
 .env.local
+.migration/
+.env.supabase.active
+config/supabase/*.env
+!config/supabase/*.example.env
 *.log
 .DS_Store
 bun.lock
+.vercel

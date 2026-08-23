@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { browserSessionPersistence, getAuth, GoogleAuthProvider, getRedirectResult, onAuthStateChanged, setPersistence, signInWithPopup, signOut } from 'firebase/auth';
+import { browserLocalPersistence, getAuth, GoogleAuthProvider, getRedirectResult, onAuthStateChanged, setPersistence, signInWithRedirect, signOut } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -21,21 +21,47 @@ export const googleProvider = new GoogleAuthProvider();
 export const firestore = firebaseApp ? getFirestore(firebaseApp) : null;
 export const firebaseStorage = firebaseApp ? getStorage(firebaseApp) : null;
 
-export function signInStaffWithGoogle() {
+export async function signInStaffWithGoogle() {
   if (!firebaseAuth) throw new Error('Firebase Authentication is not configured.');
-  return setPersistence(firebaseAuth, browserSessionPersistence)
-    .then(() => signInWithPopup(firebaseAuth, googleProvider));
+  await setPersistence(firebaseAuth, browserLocalPersistence);
+  // Use same-tab redirect as the primary flow. Popup authentication is
+  // routinely blocked or silently discarded by in-app browsers and Safari.
+  await signInWithRedirect(firebaseAuth, googleProvider);
+  return null;
 }
 
 export async function getFirebaseUser() {
   if (!firebaseAuth) return null;
-  return firebaseAuth.currentUser;
+  return firebaseAuth.currentUser ?? await waitForFirebaseUser();
+}
+
+function waitForFirebaseUser(timeoutMs = 8000) {
+  if (!firebaseAuth) return Promise.resolve(null);
+  if (firebaseAuth.currentUser) return Promise.resolve(firebaseAuth.currentUser);
+  return new Promise(resolve => {
+    let settled = false;
+    let unsubscribe = () => {};
+    let timer;
+    const finish = user => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      clearTimeout(timer);
+      resolve(user ?? null);
+    };
+    // Firebase emits an initial null state while it restores persistence.
+    // Do not treat that transient state as a completed login attempt.
+    unsubscribe = onAuthStateChanged(firebaseAuth, user => {
+      if (user) finish(user);
+    });
+    timer = setTimeout(() => finish(firebaseAuth.currentUser), timeoutMs);
+  });
 }
 
 export async function finishGoogleRedirect() {
   if (!firebaseAuth) return null;
   const result = await getRedirectResult(firebaseAuth);
-  return result?.user ?? firebaseAuth.currentUser;
+  return result?.user ?? await waitForFirebaseUser();
 }
 
 export function signOutStaff() {

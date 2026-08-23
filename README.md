@@ -1,95 +1,90 @@
-# Wash Point
+# Docket / WashPoint
 
-Car wash appointment booking system — 2–4 bays, staggered crew rest breaks, and a
-staff PWA for the bay board and booking-window settings. Customers book via
-Telegram/WhatsApp, not this app — see "Architecture" below.
+Firebase-backed car-wash operations and booking platform. WashPoint is the first tenant; the Phase 1 foundation allows the same deployment to house additional providers and locations safely.
 
-## Status
+## Live components
 
-Schema and staff-facing PWA are wired to a real Supabase project. The customer
-booking bot (Telegram/WhatsApp) is a separate, not-yet-built piece — see "Open items."
+- Staff PWA: Firebase Hosting, Vite and vanilla JavaScript
+- Authentication: Firebase Authentication with Google sign-in
+- Operational database: Cloud Firestore
+- Customer booking: Tier1 Telegram bot on Vercel
+- Bot session state: Firestore, surviving deployments and server restarts
+- Trusted server access: Firebase Admin credentials stored only in Vercel
 
-## Architecture
+## Tenant model
 
-- **Customers never use this PWA.** They book by messaging a Telegram/WhatsApp bot,
-  which writes directly to the `appointments` table using Supabase's `service_role`
-  key (bypasses RLS, since the bot is a trusted server-side process).
-- **This PWA is staff/owner-only.** Staff sign in with a magic link (passwordless);
-  access is gated by a `staff` table with `owner` (full access) and `worker`
-  (read-only bookings, for seeing the day's schedule) roles.
-- **Frontend**: Vite + vanilla JS, installable as a PWA (`vite-plugin-pwa`)
-- **Backend**: Supabase (Postgres + Auth). Schema in `supabase/schema.sql`
+Every operational record contains both `provider_id` and `location_id`:
 
-## Running locally
+- `providers/{providerId}` — operator/business identity
+- `locations/{locationId}` — physical outlet and timezone
+- `staff/{email}` — role and provider/location access
+- `services`, `bays`, `booking_settings`, `appointments`, `blackout_dates`, `bay_closures`, and `crew_break_schedule` — location-scoped operations
+- `booking_day_locks` — server transaction locks that serialize competing bookings for a bay/day
+- `chat_*` — Firebase Admin-only durable Chat SDK state
+
+Legacy WashPoint data uses `washpoint` and `washpoint-main`. Staff records without explicit tenant IDs are treated as legacy WashPoint staff during migration.
+
+## Staff roles
+
+- `platform_owner` — manages all providers and locations
+- `owner` — manages a provider and its locations/staff
+- `manager` — manages operational setup for accessible locations
+- `worker` — board access only
+
+Portal routes:
+
+- `#/staff/login`
+- `#/staff/board`
+- `#/staff/settings`
+- `#/staff/organization`
+
+## Local development
 
 ```bash
-bun install   # or npm install
-bun run dev   # or npm run dev
+npm install
+npm run dev
 ```
 
-Without a `.env` file, the app runs entirely on mock data (`src/lib/api.js`), so you
-can click through the staff console with nothing configured.
+Copy `.env.example` to `.env` and fill in the Firebase web configuration. Without it, the UI uses local mock catalogue data.
 
-## Connecting a real Supabase project
+Bot development lives in `bot-ts`:
 
-1. Create a project at supabase.com
-2. Run `supabase/schema.sql` in the SQL editor (creates tables and RLS policies)
-3. Copy `.env.example` to `.env` and fill in your project URL + anon/publishable key
-4. Enable email auth (magic link) under Authentication → Providers
-5. **Bootstrap the first owner manually** — sign in once via the app's magic link to
-   create the `auth.users` row, then insert a matching row into `staff` with
-   `role = 'owner'` directly via the SQL editor (RLS intentionally blocks any
-   self-service way to grant yourself staff access — there's no bootstrapping
-   path around it by design)
+```bash
+npm --prefix bot-ts install
+npm --prefix bot-ts test
+npm --prefix bot-ts run typecheck
+```
 
-## Routes
+The Vercel bot requires `FIREBASE_SERVICE_ACCOUNT_JSON`, Telegram credentials, and `TIER1_PROVIDER_ID` / `TIER1_LOCATION_ID`. `APPOINTMENTS_API_SECRET` protects the private server booking endpoint.
 
-| Route | Screen |
-|---|---|
-| `#/staff/login` | Staff magic-link sign-in |
-| `#/staff/board` | Staff bay status board (owner + worker) |
-| `#/staff/settings` | Booking window, buffer time, and crew break configuration (owner only) |
+## Switching Supabase accounts/projects
 
-## Data model
+The live app currently runs on Firebase. Supabase is being kept as a migration target, so its credentials are isolated from the working Firebase `.env`.
 
-See `supabase/schema.sql` for the full definition. Key decisions:
+Create one local profile per Supabase account/project:
 
-- **Customer identity is a chat_id, not a Supabase Auth account** — `appointments`
-  stores `customer_chat_id` + `channel` (telegram/whatsapp) directly, since booking
-  happens through the messaging bot, not an in-app login.
-- **Bay availability has two layers**: `bays.is_active` (indefinite on/off) and
-  `bay_closures` (planned, time-ranged closures). A bay going down mid-shift with
-  existing bookings against it is handled by `reportBayDown()` in `src/lib/api.js`,
-  which tries to auto-reassign affected bookings to another bay with a free slot, and
-  flags anything it can't reassign (`needs_attention = true`) for a staff member to
-  resolve manually — reschedule or cancel, never auto-cancelled.
-- **Crew rest breaks are a recurring daily pattern, not manual entry** —
-  `crew_break_schedule` holds one row per bay (a daily start time + duration).
-  Rather than requiring staff to re-add a closure every single day, the availability
-  check resolves each day's actual break window from this pattern at query time,
-  the same way it already treats `bay_closures`. Stagger break times per bay outside
-  your peak hours so bays don't all lose capacity simultaneously.
-- **Buffer time is applied at query time, not stored per booking** — booking
-  conflicts extend each *existing* appointment's occupied window by
-  `booking_settings.buffer_minutes` when checking for overlaps. This is intentionally
-  one-sided (only the existing booking's end is extended, not the candidate's own
-  window) so back-to-back bookings separated by exactly one buffer never get
-  double-counted.
-- **Booking window is relative, not fixed** — `min_lead_minutes` +
-  `max_advance_days`, rather than a fixed start/end calendar range, so it doesn't need
-  manual monthly extension.
+```bash
+cp config/supabase/account-a.example.env config/supabase/account-a.env
+cp config/supabase/account-b.example.env config/supabase/account-b.env
+```
 
-## Open items
+Fill each profile with that project’s URL, project ref, and publishable key. Do not put a `service_role` key in a browser profile, and do not commit the `.env` files.
 
-- [ ] The Telegram/WhatsApp booking bot itself — nothing customer-facing exists yet,
-      only the schema and staff console it'll write into
-- [ ] Payment gateway integration (Billplz/Curlec/HitPay) — Stripe was ruled out for
-      the Malaysian market (no DuitNow QR / Touch 'n Go / GrabPay)
-- [ ] `getAvailableSlots` still uses a hardcoded 9am–7pm scan window and doesn't yet
-      respect `weekday_open/close`, `weekend_open/close`, or `blackout_dates` — a
-      pre-existing simplification, unrelated to the buffer/crew-break work
-- [ ] Vehicle plate is a freeform field on the appointment now (no separate
-      `vehicles` table) since it was tied to the removed customer-account login
-- [ ] SMS/WhatsApp notifications (booking confirmation, reminder, bay-reassignment
-      notice)
-- [ ] PDPA-facing copy: what's collected, retention policy, deletion request path
+Useful commands:
+
+```bash
+node scripts/supabase-profile.mjs list
+node scripts/supabase-profile.mjs show account-a
+node scripts/supabase-profile.mjs use account-a
+node scripts/supabase-profile.mjs run account-b -- supabase projects list
+```
+
+`use` creates `.env.supabase.active` for local tooling only; it does not change the Firebase `.env`. `run` is safer for one-off migration commands because the selected profile is passed only to that command. Account login itself remains separate: if the two projects belong to different Supabase accounts, complete the Supabase OAuth login for the intended account before using its dashboard or connector.
+
+## Booking guarantees
+
+Confirmation runs in a Firestore transaction. It re-reads the live service, settings, bays, appointments, blackout dates, breaks, and outages. A deterministic request ID prevents duplicate confirmation, while a per-bay/day lock prevents two concurrent customers from taking an overlapping slot.
+
+## Legacy archive
+
+The `bot/` Python prototype and `supabase/schema.sql` are retained as historical migration references only. They are not part of the Firebase/Vercel production runtime.

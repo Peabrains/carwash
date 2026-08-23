@@ -9,13 +9,19 @@ import * as api from './lib/api.js';
 // new version is actually found, so every deploy takes effect on next
 // visit instead of requiring a manual cache clear.
 if ('serviceWorker' in navigator) {
+  // Remove service workers created by older builds so stale authentication
+  // code cannot keep intercepting the login page after a deployment.
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    registrations.forEach(registration => registration.unregister());
+  });
   import('virtual:pwa-register').then(({ registerSW }) => {
     registerSW({ immediate: true });
   });
 }
 
 const app = document.getElementById('app');
-const state = { staff: null };
+const state = { staff: null, tenants: { providers: [], locations: [] } };
+const h = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
 // Every navigation (route change, date click, settings save, etc.) bumps
 // this. Async page renders check it before touching the DOM, so a slow
@@ -27,16 +33,26 @@ let renderGen = 0;
 
 // ── Shell ────────────────────────────────────────────────────────────
 function shell(navActive, innerHTML) {
+  const tenant = api.getActiveTenant();
+  const locations = state.tenants.locations || [];
+  const currentLocation = locations.find(item => item.id === tenant.locationId);
+  const currentProvider = state.tenants.providers?.find(item => item.id === tenant.providerId);
+  const tenantOptions = locations.map(location => {
+    const provider = state.tenants.providers?.find(item => item.id === location.provider_id);
+    return `<option value="${h(location.provider_id)}|${h(location.id)}" ${location.id === tenant.locationId ? 'selected' : ''}>${h(provider?.name || location.provider_id)} · ${h(location.name)}</option>`;
+  }).join('');
   return `
     <div class="app-shell">
       <div class="topbar">
         <div class="brand"><div class="drop"></div>Wash Point</div>
+        ${navActive && tenantOptions ? `<div class="tenant-picker"><span>${h(currentProvider?.name || '')}</span><select id="tenantSelect" aria-label="Active location">${tenantOptions}</select><small>${h(currentLocation?.address || '')}</small></div>` : ''}
       </div>
       <div class="screen">${innerHTML}</div>
       ${navActive ? `
       <div class="navbar">
         <button type="button" class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</button>
         <button type="button" class="item ${navActive==='settings'?'active':''}" data-nav="#/staff/settings">Settings</button>
+        <button type="button" class="item ${navActive==='organization'?'active':''}" data-nav="#/staff/organization">Manage</button>
         <button type="button" class="item" data-signout="1">Sign out</button>
       </div>` : ''}
     </div>`;
@@ -52,18 +68,31 @@ async function pageStaffLogin() {
     <button class="btn" id="doSignIn">Sign in with Google</button>
     <p class="lead" id="errMsg" style="display:none;color:#b3261e"></p>
   `);
-  // Redirect-based Google sign-in returns to this same route. Once Firebase
-  // restores the session, move the user into the staff portal automatically.
-  const stopWatching = api.watchStaffAuth?.(async (user) => {
-    if (!user || myGen !== renderGen) return;
-    stopWatching();
-    location.hash = '#/staff/board';
-    router();
-  });
+  // Wire the button before checking for a previous redirect result. The
+  // redirect check may wait while Firebase restores persistence; the visible
+  // button must remain usable during that time.
+  document.getElementById('doSignIn').onclick = async () => {
+    const errEl = document.getElementById('errMsg');
+    errEl.style.display = 'none';
+    try {
+      const result = await api.signInStaff();
+      if (myGen !== renderGen) return;
+      if (result?.user || await api.getAuthUser?.()) {
+        location.hash = '#/staff/board';
+        router();
+        return;
+      }
+      errEl.textContent = 'Google sign-in completed, but Firebase did not restore the session. Please try again.';
+      errEl.style.display = 'block';
+    } catch (e) {
+      if (myGen !== renderGen) return;
+      errEl.textContent = e?.message || 'Could not sign in. Check your Google account and try again.';
+      errEl.style.display = 'block';
+    }
+  };
   try {
     const redirectedUser = await api.finishStaffRedirect?.();
     if (redirectedUser && myGen === renderGen) {
-      stopWatching?.();
       location.hash = '#/staff/board';
       router();
       return;
@@ -73,20 +102,6 @@ async function pageStaffLogin() {
     errEl.textContent = e?.message || 'Google sign-in could not be completed.';
     errEl.style.display = 'block';
   }
-  document.getElementById('doSignIn').onclick = async () => {
-    const errEl = document.getElementById('errMsg');
-    errEl.style.display = 'none';
-    try {
-      await api.signInStaff();
-      if (myGen !== renderGen) return;
-      location.hash = '#/staff/board';
-      router();
-    } catch (e) {
-      if (myGen !== renderGen) return;
-      errEl.textContent = e?.message || 'Could not sign in. Check your email and password.';
-      errEl.style.display = 'block';
-    }
-  };
 }
 
 // Gate: resolve current staff member. No session at all -> straight to
@@ -95,6 +110,9 @@ async function pageStaffLogin() {
 // Takes the caller's render token and checks it after every await, so a
 // stale call (superseded by a newer click) never renders over fresher UI.
 async function requireStaff(myGen) {
+  if (myGen === renderGen) {
+    app.innerHTML = shell('', '<div class="eyebrow">Staff</div><h2>Loading staff access…</h2><p class="lead">Checking your account permissions.</p>');
+  }
   const user = await api.getAuthUser();
   if (myGen !== renderGen) return null;
   if (!user) {
@@ -102,7 +120,21 @@ async function requireStaff(myGen) {
     return null;
   }
 
-  const staff = await api.getCurrentStaff();
+  let staff;
+  try {
+    staff = await api.getCurrentStaff();
+  } catch (error) {
+    if (myGen !== renderGen) return null;
+    app.innerHTML = shell('', `
+      <div class="eyebrow">Sign-in problem</div>
+      <h2>We couldn't load your staff access</h2>
+      <p class="lead">Google sign-in succeeded, but the staff record could not be read. Please try again or ask the owner to check your staff access.</p>
+      <p class="lead" style="color:#b3261e">${h(error?.code || error?.message || 'Firebase access error')}</p>
+      <button class="btn" id="retryStaff">Try again</button>
+    `);
+    document.getElementById('retryStaff').onclick = () => router();
+    return null;
+  }
   if (myGen !== renderGen) return null;
   state.staff = staff;
   if (!staff) {
@@ -118,6 +150,21 @@ async function requireStaff(myGen) {
     };
     return null;
   }
+  try {
+    state.tenants = await api.getAccessibleTenants(staff);
+  } catch (error) {
+    if (myGen !== renderGen) return null;
+    app.innerHTML = shell('', `
+      <div class="eyebrow">Dashboard loading problem</div>
+      <h2>Your account is signed in</h2>
+      <p class="lead">Firebase authentication succeeded, but the staff workspace data could not be loaded.</p>
+      <p class="lead" style="color:#b3261e">${h(error?.code || error?.message || 'Firebase data access error')}</p>
+      <button class="btn" id="retryWorkspace">Try again</button>
+    `);
+    document.getElementById('retryWorkspace').onclick = () => router();
+    return null;
+  }
+  if (myGen !== renderGen) return null;
   return staff;
 }
 
@@ -147,7 +194,7 @@ function isWeekend(dateISO) {
   const day = new Date(dateISO + 'T00:00:00').getDay();
   return day === 0 || day === 6;
 }
-// "08:00:00" (Postgres time) -> minutes since midnight
+// "08:00:00" or "08:00" -> minutes since midnight
 function timeStrToMinutes(t) {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
@@ -217,13 +264,31 @@ async function pageStaffBoard(dateISO) {
   const date = dateISO || localDateISO(new Date());
   const isToday = date === localDateISO(new Date());
 
-  const [bays, appts, settings, breaks, closures] = await Promise.all([
-    api.getActiveBays(),
-    api.getAppointmentsForDate(date),
-    api.getBookingSettings(),
-    api.getCrewBreaks(),
-    api.getBayClosuresForDate(date),
-  ]);
+  let bays, appts, settings, breaks, closures;
+  try {
+    const read = (label, operation) => operation().catch(error => {
+      throw new Error(`${label}: ${error?.code || error?.message || 'read failed'}`);
+    });
+    [bays, appts, settings, breaks, closures] = await Promise.all([
+      read('bays', () => api.getActiveBays()),
+      read('appointments', () => api.getAppointmentsForDate(date)),
+      read('booking settings', () => api.getBookingSettings()),
+      read('crew breaks', () => api.getCrewBreaks()),
+      read('bay outages', () => api.getBayClosuresForDate(date)),
+    ]);
+  } catch (error) {
+    if (myGen !== renderGen) return;
+    app.innerHTML = shell('board', `
+      <div class="eyebrow">Board loading problem</div>
+      <h2>Staff access is working</h2>
+      <p class="lead">The dashboard could not load its booking data.</p>
+      <p class="lead" style="color:#b3261e">${h(error?.code || error?.message || 'Firebase data access error')}</p>
+      <button class="btn" id="retryBoard">Try again</button>
+    `);
+    wireNav();
+    document.getElementById('retryBoard').onclick = () => router();
+    return;
+  }
   if (myGen !== renderGen) return;
 
   const weekend = isWeekend(date);
@@ -512,12 +577,148 @@ async function pageStaffSettings() {
   wireNav();
 }
 
+async function pageStaffOrganization() {
+  const myGen = ++renderGen;
+  const staff = await requireStaff(myGen);
+  if (!staff) return;
+  if (!['platform_owner', 'owner', 'manager'].includes(staff.role)) {
+    app.innerHTML = shell('organization', `<div class="eyebrow">Management</div><h2>Manager access required</h2><p class="lead">Workers can view the board but cannot change the business setup.</p>`);
+    wireNav();
+    return;
+  }
+  const tenant = api.getActiveTenant();
+  const provider = state.tenants.providers.find(item => item.id === tenant.providerId);
+  const location = state.tenants.locations.find(item => item.id === tenant.locationId);
+  const [services, bays, staffMembers] = await Promise.all([
+    api.getServices({ includeInactive: true }), api.getActiveBays({ includeInactive: true }), api.listStaff(),
+  ]);
+  if (myGen !== renderGen) return;
+
+  const serviceRows = services.map(service => `<div class="manage-grid manage-service" data-service-row="${h(service.id)}">
+    <input data-field="name" value="${h(service.name)}" aria-label="Service name">
+    <input data-field="duration" type="number" min="1" value="${Number(service.duration_minutes)}" aria-label="Duration in minutes">
+    <input data-field="price" type="number" min="0" step="0.01" value="${Number(service.price_myr)}" aria-label="Price in ringgit">
+    <label class="check"><input data-field="active" type="checkbox" ${service.is_active !== false ? 'checked' : ''}> Active</label>
+    <button class="mini-btn" data-save-service="${h(service.id)}">Save</button>
+  </div>`).join('') || '<p class="lead">No services configured for this location.</p>';
+  const bayRows = bays.map(bay => `<div class="manage-grid manage-bay" data-bay-row="${h(bay.id)}">
+    <input data-field="name" value="${h(bay.name)}" aria-label="Bay name">
+    <select data-field="status"><option value="open" ${bay.status !== 'maintenance' ? 'selected' : ''}>Open</option><option value="maintenance" ${bay.status === 'maintenance' ? 'selected' : ''}>Maintenance</option></select>
+    <label class="check"><input data-field="active" type="checkbox" ${bay.is_active !== false ? 'checked' : ''}> Active</label>
+    <button class="mini-btn" data-save-bay="${h(bay.id)}">Save</button>
+  </div>`).join('') || '<p class="lead">No bays configured for this location.</p>';
+  const staffRows = staffMembers.map(member => `<div class="settings-row"><div><strong>${h(member.name || member.email || member.id)}</strong><div class="muted">${h(member.email || member.id)} · ${h(member.role)}</div></div><span class="tag ${member.is_active === false ? 'busy' : ''}">${member.is_active === false ? 'Inactive' : 'Active'}</span></div>`).join('') || '<p class="lead">No staff assigned to this location.</p>';
+
+  app.innerHTML = shell('organization', `
+    <div class="eyebrow">Management</div>
+    <h2>${h(provider?.name || tenant.providerId)}</h2>
+    <p class="lead">Manage the selected location. Every change is isolated to this provider and location.</p>
+
+    <section class="management-section">
+      <h3>Location</h3>
+      <div class="manage-form two-col">
+        <div class="field"><label>Location name</label><input id="locationName" value="${h(location?.name || '')}"></div>
+        <div class="field"><label>Timezone</label><input id="locationTimezone" value="${h(location?.timezone || 'Asia/Kuala_Lumpur')}"></div>
+        <div class="field span-two"><label>Address</label><input id="locationAddress" value="${h(location?.address || '')}"></div>
+      </div>
+      <button class="btn compact" id="saveLocation">Save location</button>
+    </section>
+
+    <section class="management-section">
+      <h3>Services</h3>
+      <p class="lead">Name, wash duration, price (RM), and whether customers can book it.</p>
+      <div class="manage-list">${serviceRows}</div>
+      <div class="manage-grid manage-service new-row">
+        <input id="newServiceName" placeholder="New service">
+        <input id="newServiceDuration" type="number" min="1" value="30" aria-label="Duration">
+        <input id="newServicePrice" type="number" min="0" step="0.01" value="0" aria-label="Price">
+        <span></span><button class="mini-btn" id="addService">Add</button>
+      </div>
+    </section>
+
+    <section class="management-section">
+      <h3>Bays</h3>
+      <p class="lead">Inactive bays are hidden completely. Maintenance bays stay visible but cannot accept bookings.</p>
+      <div class="manage-list">${bayRows}</div>
+      <div class="manage-grid manage-bay new-row"><input id="newBayName" placeholder="New bay"><span>Open</span><span>Active</span><button class="mini-btn" id="addBay">Add</button></div>
+    </section>
+
+    ${staff.role !== 'manager' ? `<section class="management-section">
+      <h3>Staff</h3><div class="manage-list">${staffRows}</div>
+      <div class="manage-form three-col">
+        <div class="field"><label>Email</label><input id="staffEmail" type="email" placeholder="staff@example.com"></div>
+        <div class="field"><label>Name</label><input id="staffName" placeholder="Staff name"></div>
+        <div class="field"><label>Role</label><select id="staffRole"><option value="worker">Worker</option><option value="manager">Manager</option><option value="owner">Owner</option></select></div>
+      </div><button class="btn compact" id="addStaff">Add or update staff</button>
+    </section>` : ''}
+
+    ${['platform_owner', 'owner'].includes(staff.role) ? `<section class="management-section">
+      <h3>Locations</h3>
+      <p class="lead">Add another outlet to the selected provider.</p>
+      <div class="manage-form two-col">
+        <div class="field"><label>New location name</label><input id="newLocationName" placeholder="Outlet name"></div>
+        <div class="field"><label>Address</label><input id="newLocationAddress" placeholder="Address"></div>
+      </div><button class="btn compact" id="addLocation">Add location to ${h(provider?.name || tenant.providerId)}</button>
+    </section>` : ''}
+    ${staff.role === 'platform_owner' ? `<section class="management-section platform-section">
+      <h3>Platform administration</h3>
+      <p class="lead">Create another independent car-wash provider.</p>
+      <div class="manage-form two-col">
+        <div class="field"><label>New provider name</label><input id="newProviderName" placeholder="Provider name"></div>
+        <div class="field action-field"><button class="btn compact" id="addProvider">Create provider</button></div>
+      </div>
+    </section>` : ''}
+  `);
+
+  const refresh = () => pageStaffOrganization();
+  document.getElementById('saveLocation').onclick = async () => {
+    await api.updateLocation(tenant.locationId, { name: document.getElementById('locationName').value.trim(), address: document.getElementById('locationAddress').value.trim(), timezone: document.getElementById('locationTimezone').value.trim() });
+    state.tenants = await api.getAccessibleTenants(staff); refresh();
+  };
+  document.querySelectorAll('[data-save-service]').forEach(button => button.onclick = async () => {
+    const row = document.querySelector(`[data-service-row="${CSS.escape(button.dataset.saveService)}"]`);
+    await api.saveService({ id: button.dataset.saveService, name: row.querySelector('[data-field="name"]').value, durationMinutes: row.querySelector('[data-field="duration"]').value, priceMyr: row.querySelector('[data-field="price"]').value, isActive: row.querySelector('[data-field="active"]').checked }); refresh();
+  });
+  document.getElementById('addService').onclick = async () => {
+    const name = document.getElementById('newServiceName').value.trim(); if (!name) return alert('Enter a service name.');
+    await api.saveService({ name, durationMinutes: document.getElementById('newServiceDuration').value, priceMyr: document.getElementById('newServicePrice').value }); refresh();
+  };
+  document.querySelectorAll('[data-save-bay]').forEach(button => button.onclick = async () => {
+    const row = document.querySelector(`[data-bay-row="${CSS.escape(button.dataset.saveBay)}"]`);
+    await api.saveBay({ id: button.dataset.saveBay, name: row.querySelector('[data-field="name"]').value, status: row.querySelector('[data-field="status"]').value, isActive: row.querySelector('[data-field="active"]').checked }); refresh();
+  });
+  document.getElementById('addBay').onclick = async () => {
+    const name = document.getElementById('newBayName').value.trim(); if (!name) return alert('Enter a bay name.');
+    await api.saveBay({ name }); refresh();
+  };
+  document.getElementById('addStaff')?.addEventListener('click', async () => {
+    const email = document.getElementById('staffEmail').value.trim(); if (!email) return alert('Enter the staff email used for Google sign-in.');
+    await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); refresh();
+  });
+  document.getElementById('addProvider')?.addEventListener('click', async () => {
+    const name = document.getElementById('newProviderName').value.trim(); if (!name) return alert('Enter a provider name.');
+    await api.createProvider({ name }); state.tenants = await api.getAccessibleTenants(staff); refresh();
+  });
+  document.getElementById('addLocation')?.addEventListener('click', async () => {
+    const name = document.getElementById('newLocationName').value.trim(); if (!name) return alert('Enter a location name.');
+    const created = await api.createLocation({ name, address: document.getElementById('newLocationAddress').value });
+    api.setActiveTenant(created.provider_id, created.id); state.tenants = await api.getAccessibleTenants(staff); refresh();
+  });
+  wireNav();
+}
+
 // Direct per-element handlers, not window-level delegation — every other
 // interactive element in this app is wired this way already; the nav bar
 // was the one exception, and reports of it not responding on mobile are
 // exactly the symptom delegation-vs-direct-binding differences can cause.
 function wireNav() {
   document.querySelectorAll('[data-nav]').forEach(el => el.onclick = () => { location.hash = el.dataset.nav; });
+  const tenantSelect = document.getElementById('tenantSelect');
+  if (tenantSelect) tenantSelect.onchange = () => {
+    const [providerId, locationId] = tenantSelect.value.split('|');
+    api.setActiveTenant(providerId, locationId);
+    router();
+  };
   document.querySelectorAll('[data-signout]').forEach(el => el.onclick = async () => {
     await api.signOutStaff();
     location.hash = '#/staff/login';
@@ -529,6 +730,7 @@ const routes = {
   '#/staff/login': pageStaffLogin,
   '#/staff/board': pageStaffBoard,
   '#/staff/settings': pageStaffSettings,
+  '#/staff/organization': pageStaffOrganization,
 };
 
 function router() {

@@ -3,48 +3,158 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
-      return request.auth != null;
+      return request.auth != null && request.auth.token.email != null;
+    }
+
+    function staffPath() {
+      return /databases/$(database)/documents/staff/$(request.auth.token.email);
+    }
+
+    function bayPath(bayId) {
+      return /databases/$(database)/documents/bays/$(bayId);
+    }
+
+    function staffData() {
+      return get(staffPath()).data;
     }
 
     function isStaff() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/staff/$(request.auth.token.email))
-        && get(/databases/$(database)/documents/staff/$(request.auth.token.email)).data.is_active == true;
+      return signedIn() && exists(staffPath()) && staffData().is_active == true;
     }
 
-    // These are non-sensitive booking catalogue/configuration values.
-    match /services/{serviceId} {
-      allow read: if true;
-      allow write: if isStaff();
+    function role() {
+      return isStaff() ? staffData().role : 'none';
     }
 
-    match /bays/{bayId} {
-      allow read: if true;
-      allow write: if isStaff();
+    function isPlatformOwner() {
+      return role() == 'platform_owner';
     }
 
-    match /booking_settings/{settingId} {
-      allow read: if true;
-      allow write: if isStaff();
+    function canAccessProvider(providerId) {
+      return isPlatformOwner() || (isStaff() && (
+        (('provider_id' in staffData()) && staffData().provider_id == providerId) ||
+        (('provider_ids' in staffData()) && providerId in staffData().provider_ids) ||
+        (!('provider_id' in staffData()) && !('provider_ids' in staffData()) && providerId == 'washpoint')
+      ));
+    }
+
+    function canAccessLocation(providerId, locationId) {
+      return canAccessProvider(providerId) && (
+        role() in ['platform_owner', 'owner', 'manager'] ||
+        (('location_id' in staffData()) && staffData().location_id == locationId) ||
+        (('location_ids' in staffData()) && locationId in staffData().location_ids) ||
+        (!('location_id' in staffData()) && !('location_ids' in staffData()) && locationId == 'washpoint-main')
+      );
+    }
+
+    function canManage(providerId, locationId) {
+      return role() in ['platform_owner', 'owner', 'manager'] && canAccessLocation(providerId, locationId);
+    }
+
+    function canOwn(providerId) {
+      return role() in ['platform_owner', 'owner'] && canAccessProvider(providerId);
+    }
+
+    // Legacy outage documents predate tenant scope fields. Derive their
+    // access from the referenced bay instead of making old outages unreadable.
+    function canAccessBay(bayId) {
+      return exists(bayPath(bayId)) && canAccessLocation(
+        get(bayPath(bayId)).data.provider_id,
+        get(bayPath(bayId)).data.location_id
+      );
+    }
+
+    function canManageBay(bayId) {
+      return exists(bayPath(bayId)) && canManage(
+        get(bayPath(bayId)).data.provider_id,
+        get(bayPath(bayId)).data.location_id
+      );
+    }
+
+    match /providers/{providerId} {
+      allow read: if canAccessProvider(providerId);
+      allow create, delete: if isPlatformOwner();
+      allow update: if isPlatformOwner() || canOwn(providerId);
+    }
+
+    match /locations/{locationId} {
+      allow read: if canAccessLocation(resource.data.provider_id, locationId);
+      allow create: if canOwn(request.resource.data.provider_id);
+      allow update, delete: if canOwn(resource.data.provider_id)
+        && request.resource.data.provider_id == resource.data.provider_id;
     }
 
     match /staff/{email} {
-      allow read: if isStaff() && request.auth.token.email == email;
-      allow write: if isStaff();
+      // A user must be able to read their own staff record in order to learn
+      // whether they are staff. Requiring isStaff() first creates a circular
+      // check and makes every legitimate login fail with permission-denied.
+      allow read: if signedIn() && (
+        request.auth.token.email == email ||
+        (isStaff() && (isPlatformOwner() ||
+          (('provider_id' in resource.data) && canOwn(resource.data.provider_id))))
+      );
+      allow create: if isPlatformOwner() || (
+        ('provider_id' in request.resource.data) && canOwn(request.resource.data.provider_id)
+        && request.resource.data.role != 'platform_owner'
+      );
+      allow update: if isPlatformOwner() || (
+        ('provider_id' in resource.data) && canOwn(resource.data.provider_id)
+        && request.resource.data.provider_id == resource.data.provider_id
+        && request.resource.data.role != 'platform_owner'
+      );
+      allow delete: if isPlatformOwner() || (('provider_id' in resource.data) && canOwn(resource.data.provider_id));
     }
 
-    match /appointments/{appointmentId} {
-      allow read, write: if isStaff();
+    match /services/{id} {
+      allow read: if canAccessLocation(resource.data.provider_id, resource.data.location_id);
+      allow create: if canManage(request.resource.data.provider_id, request.resource.data.location_id);
+      allow update, delete: if canManage(resource.data.provider_id, resource.data.location_id)
+        && request.resource.data.provider_id == resource.data.provider_id
+        && request.resource.data.location_id == resource.data.location_id;
     }
 
-    match /blackout_dates/{dateId} {
-      allow read: if true;
-      allow write: if isStaff();
+    match /bays/{id} {
+      allow read: if canAccessLocation(resource.data.provider_id, resource.data.location_id);
+      allow create: if canManage(request.resource.data.provider_id, request.resource.data.location_id);
+      allow update, delete: if canManage(resource.data.provider_id, resource.data.location_id)
+        && request.resource.data.provider_id == resource.data.provider_id
+        && request.resource.data.location_id == resource.data.location_id;
     }
 
-    match /bay_closures/{closureId} {
-      allow read: if true;
-      allow write: if isStaff();
+    match /booking_settings/{id} {
+      allow read: if canAccessLocation(resource.data.provider_id, resource.data.location_id);
+      allow create: if canManage(request.resource.data.provider_id, request.resource.data.location_id);
+      allow update, delete: if canManage(resource.data.provider_id, resource.data.location_id)
+        && request.resource.data.provider_id == resource.data.provider_id
+        && request.resource.data.location_id == resource.data.location_id;
+    }
+
+    match /appointments/{id} {
+      allow read: if canAccessLocation(resource.data.provider_id, resource.data.location_id);
+      allow create: if canManage(request.resource.data.provider_id, request.resource.data.location_id);
+      allow update, delete: if canManage(resource.data.provider_id, resource.data.location_id)
+        && request.resource.data.provider_id == resource.data.provider_id
+        && request.resource.data.location_id == resource.data.location_id;
+    }
+
+    match /blackout_dates/{id} {
+      allow read: if canAccessLocation(resource.data.provider_id, resource.data.location_id);
+      allow create: if canManage(request.resource.data.provider_id, request.resource.data.location_id);
+      allow update, delete: if canManage(resource.data.provider_id, resource.data.location_id);
+    }
+
+    match /bay_closures/{id} {
+      allow read: if canAccessBay(resource.data.bay_id) ||
+        (('provider_id' in resource.data) && canAccessLocation(resource.data.provider_id, resource.data.location_id));
+      allow create: if canManage(request.resource.data.provider_id, request.resource.data.location_id);
+      allow update, delete: if canManageBay(resource.data.bay_id) ||
+        (('provider_id' in resource.data) && canManage(resource.data.provider_id, resource.data.location_id));
+    }
+
+    match /crew_break_schedule/{id} {
+      allow read: if canAccessLocation(resource.data.provider_id, resource.data.location_id);
+      allow create: if canManage(request.resource.data.provider_id, request.resource.data.location_id);
+      allow update, delete: if canManage(resource.data.provider_id, resource.data.location_id);
     }
 
     match /{document=**} {

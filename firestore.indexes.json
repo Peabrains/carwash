@@ -1,0 +1,14 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "appointments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "provider_id", "order": "ASCENDING" },
+        { "fieldPath": "location_id", "order": "ASCENDING" },
+        { "fieldPath": "scheduled_date", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

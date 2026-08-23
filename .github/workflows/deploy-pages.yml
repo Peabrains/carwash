@@ -26,6 +26,9 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
+          # Keep Firebase as the safe default until the Supabase cutover test passes.
+          # Set the GitHub Actions secret VITE_DATA_BACKEND to "supabase" when ready.
+          VITE_DATA_BACKEND: ${{ secrets.VITE_DATA_BACKEND || 'firebase' }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
