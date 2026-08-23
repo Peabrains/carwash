@@ -215,8 +215,8 @@ export async function setCrewBreak({ bayId, startTime, durationMinutes }) {
 }
 export async function removeCrewBreak(id) { if (useSupabase) return supabaseApi.removeCrewBreak(id); ensureFirebase(); return deleteDoc(doc(firestore, 'crew_break_schedule', id)); }
 
-export async function getAvailableSlots(dateISO, serviceId) {
-  if (useSupabase) return supabaseApi.getAvailableSlots(dateISO, serviceId);
+export async function getAvailableSlots(dateISO, serviceId, excludeAppointmentId = null) {
+  if (useSupabase) return supabaseApi.getAvailableSlots(dateISO, serviceId, excludeAppointmentId);
   if (!firebaseConfigured) return ['09:00', '09:30', '10:00'].map(time => ({ time, available: true, bayId: 'bay1' }));
   const [bays, services, settings, appointments, blackoutDates, closures] = await Promise.all([
     getActiveBays(), getServices(), getBookingSettings(), appointmentsForDate(dateISO), docsFor('blackout_dates'), getBayClosuresForDate(dateISO),
@@ -270,7 +270,7 @@ export async function clearBayClosure(closureId) { if (useSupabase) return supab
 export async function bringBayUp(bayId) { if (useSupabase) return supabaseApi.bringBayUp(bayId); ensureFirebase(); return updateDoc(doc(firestore, 'bays', bayId), { status: 'open', updated_at: new Date().toISOString() }); }
 export async function getBookingHistory() { if (useSupabase) return supabaseApi.getBookingHistory(); ensureFirebase(); const values = await docsFor('appointments'); return values.map(item => ({ ...item, events: [] })); }
 export async function resolveAppointmentAttention(id, options = {}) { if (useSupabase) return supabaseApi.resolveAppointmentAttention(id, options); ensureFirebase(); return updateDoc(doc(firestore, 'appointments', id), { needs_attention: false, updated_at: new Date().toISOString() }); }
-export async function rescheduleAppointment(id, { dateISO, time } = {}) { if (useSupabase) return supabaseApi.rescheduleAppointment(id, { dateISO, time }); ensureFirebase(); throw new Error('Rescheduling is currently available in Supabase mode only.'); }
+export async function rescheduleAppointment(id, { dateISO, time, bayId } = {}) { if (useSupabase) return supabaseApi.rescheduleAppointment(id, { dateISO, time, bayId }); ensureFirebase(); throw new Error('Rescheduling is currently available in Supabase mode only.'); }
 export async function updateAppointmentStatus(id, status, description = '') { if (useSupabase) return supabaseApi.updateAppointmentStatus(id, status, description); ensureFirebase(); return updateDoc(doc(firestore, 'appointments', id), { status, updated_at: new Date().toISOString() }); }
 export async function archiveAppointment(id, description = '') { if (useSupabase) return supabaseApi.archiveAppointment(id, description); ensureFirebase(); return updateDoc(doc(firestore, 'appointments', id), { archived_at: new Date().toISOString(), updated_at: new Date().toISOString() }); }
 export function watchOperationalChanges(callback) { return useSupabase ? supabaseApi.watchOperationalChanges(callback) : () => {}; }
