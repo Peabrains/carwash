@@ -548,17 +548,21 @@ async function pageStaffSettings() {
   `);
 
   document.getElementById('save').onclick = async () => {
-    await api.updateBookingSettings({
-      min_lead_minutes: Number(document.getElementById('lead').value),
-      max_advance_days: Number(document.getElementById('advance').value),
-      buffer_minutes: Number(document.getElementById('buffer').value),
-      weekday_open: document.getElementById('weekdayOpen').value,
-      weekday_close: document.getElementById('weekdayClose').value,
-      weekend_open: document.getElementById('weekendOpen').value,
-      weekend_close: document.getElementById('weekendClose').value,
-    });
-    if (myGen !== renderGen) return;
-    alert('Saved.');
+    try {
+      await api.updateBookingSettings({
+        min_lead_minutes: Number(document.getElementById('lead').value),
+        max_advance_days: Number(document.getElementById('advance').value),
+        buffer_minutes: Number(document.getElementById('buffer').value),
+        weekday_open: document.getElementById('weekdayOpen').value,
+        weekday_close: document.getElementById('weekdayClose').value,
+        weekend_open: document.getElementById('weekendOpen').value,
+        weekend_close: document.getElementById('weekendClose').value,
+      });
+      if (myGen !== renderGen) return;
+      alert('Saved.');
+    } catch (error) {
+      alert(`Could not save settings: ${error?.message || 'Unknown error'}`);
+    }
   };
   document.getElementById('addBreak').onclick = async () => {
     await api.setCrewBreak({
