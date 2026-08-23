@@ -9,7 +9,10 @@ export const supabase = supabaseConfigured
   : null;
 
 function redirectUrl() {
-  return window.location.href;
+  // Supabase's redirect allow-list matches the app URL, not the hash-router
+  // route. The callback handler below restores the session, then the app's
+  // router sends the signed-in user to the board.
+  return `${window.location.origin}${window.location.pathname}`;
 }
 
 export async function signInStaffWithGoogle() {
@@ -37,6 +40,16 @@ export function watchSupabaseUser(callback) {
 
 export async function finishSupabaseRedirect() {
   if (!supabase) return null;
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get('code');
+  if (code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+    url.searchParams.delete('code');
+    url.searchParams.delete('state');
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+    return data.session?.user || null;
+  }
   const { data, error } = await supabase.auth.getSession();
   if (error && error.name !== 'AuthSessionMissingError') throw error;
   return data.session?.user || null;

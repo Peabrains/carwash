@@ -82,7 +82,7 @@ async function pageStaffLogin() {
         router();
         return;
       }
-      errEl.textContent = 'Google sign-in completed, but Firebase did not restore the session. Please try again.';
+      errEl.textContent = 'Google sign-in completed, but the session was not restored yet. Please refresh once and try again.';
       errEl.style.display = 'block';
     } catch (e) {
       if (myGen !== renderGen) return;
