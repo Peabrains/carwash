@@ -56,3 +56,13 @@ export async function finishSupabaseRedirect() {
 }
 
 export function signOutSupabase() { return supabase ? supabase.auth.signOut() : Promise.resolve(); }
+
+export function watchOperationalChanges(providerId, locationId, callback) {
+  if (!supabase) return () => {};
+  const channel = supabase.channel(`docket-board-${providerId}-${locationId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter: `provider_id=eq.${providerId}` }, callback)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bay_closures', filter: `provider_id=eq.${providerId}` }, callback)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bays', filter: `provider_id=eq.${providerId}` }, callback)
+    .subscribe();
+  return () => { supabase.removeChannel(channel); };
+}

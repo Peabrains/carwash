@@ -32,6 +32,7 @@ const h = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp
 // render finished LAST used to win, not whichever was clicked last.
 let renderGen = 0;
 let boardRefreshTimer = null;
+let boardRealtimeCleanup = null;
 
 // ── Shell ────────────────────────────────────────────────────────────
 function shell(navActive, innerHTML) {
@@ -55,6 +56,7 @@ function shell(navActive, innerHTML) {
         <button type="button" class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</button>
         <button type="button" class="item ${navActive==='settings'?'active':''}" data-nav="#/staff/settings">Settings</button>
         <button type="button" class="item ${navActive==='organization'?'active':''}" data-nav="#/staff/organization">Manage</button>
+        <button type="button" class="item ${navActive==='history'?'active':''}" data-nav="#/staff/history">History</button>
         <button type="button" class="item" data-signout="1">Sign out</button>
       </div>` : ''}
     </div>`;
@@ -230,7 +232,7 @@ function bayAvailability(bookings, bufferMinutes, now) {
 // separate technical reference (which platform/id to message back via) —
 // it is NOT a phone number for Telegram, only WhatsApp. There is still no
 // email field anywhere in the schema; the booking flow never collects one.
-function showApptModal(a) {
+function showApptModal(a, onChanged = () => {}) {
   const idLabel = a.channel === 'whatsapp' ? 'WhatsApp ID' : 'Telegram ID';
   const rows = [
     ['Customer', a.customer_name || '—'],
@@ -252,27 +254,29 @@ function showApptModal(a) {
     <div class="modal-card">
       <h3>Booking details</h3>
       ${rows.map(([k, v]) => `<div class="modal-row"><span>${k}</span><span>${v}</span></div>`).join('')}
-      <button class="btn" id="closeModal">Close</button>
+      <div class="confirmation-actions"><button class="btn secondary" id="closeModal">Close</button>${a.status !== 'completed' && a.status !== 'cancelled' ? '<button class="btn" id="completeBooking">Mark completed</button>' : ''}<button class="btn ghost" id="archiveBooking">Remove from calendar</button></div>
     </div>`;
   overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
   document.body.appendChild(overlay);
   document.getElementById('closeModal').onclick = () => overlay.remove();
+  document.getElementById('completeBooking')?.addEventListener('click', async () => { try { await api.updateAppointmentStatus(a.id, 'completed', 'Booking marked completed by staff'); overlay.remove(); onChanged(); } catch (error) { alert(`Could not mark booking completed: ${error?.message || 'Unknown error'}`); } });
+  document.getElementById('archiveBooking')?.addEventListener('click', async () => { if (!confirm('Remove this booking from the active calendar? It will remain in History.')) return; try { await api.archiveAppointment(a.id, 'Booking removed from the active calendar by staff'); overlay.remove(); onChanged(); } catch (error) { alert(`Could not archive booking: ${error?.message || 'Unknown error'}`); } });
 }
 
 async function showRescheduleModal(a, dateISO, onDone) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
-  overlay.innerHTML = `<div class="modal-card"><h3>Move booking</h3><p class="lead">Choose another available time for ${h(a.services?.name || 'this booking')} on ${h(dateISO)}.</p><p class="lead">Loading available times…</p></div>`;
+  overlay.innerHTML = `<div class="modal-card"><h3>Move booking</h3><p class="lead">Choose another day and available time for ${h(a.services?.name || 'this booking')}.</p><input id="moveDate" type="date" value="${h(dateISO)}" min="${h(localDateISO(new Date()))}"><p class="lead" id="moveLoading">Loading available times…</p></div>`;
   document.body.appendChild(overlay);
   try {
-    const slots = (await api.getAvailableSlots(dateISO, a.service_id)).filter(item => item.available);
-    overlay.querySelector('.modal-card').innerHTML = `<h3>Move booking</h3><p class="lead">Choose another available time for ${h(a.services?.name || 'this booking')} on ${h(dateISO)}.</p><select id="moveTime" class="move-time-select">${slots.length ? slots.map(item => `<option value="${h(item.time)}">${h(item.time)}</option>`).join('') : '<option value="">No other times available</option>'}</select><div class="confirmation-actions"><button class="btn secondary" id="cancelMove" type="button">Cancel</button><button class="btn" id="saveMove" type="button" ${slots.length ? '' : 'disabled'}>Move booking</button></div>`;
-    overlay.querySelector('#cancelMove').onclick = () => overlay.remove();
-    overlay.querySelector('#saveMove').onclick = async () => { const button = overlay.querySelector('#saveMove'); button.disabled = true; try { await api.rescheduleAppointment(a.id, { dateISO, time: overlay.querySelector('#moveTime').value }); overlay.remove(); onDone(); } catch (error) { button.disabled = false; alert(`Could not move booking: ${error?.message || 'Unknown error'}`); } };
+    const loadForDate = async selectedDate => { const slots = (await api.getAvailableSlots(selectedDate, a.service_id)).filter(item => item.available); const card = overlay.querySelector('.modal-card'); card.innerHTML = `<h3>Move booking</h3><p class="lead">Choose another day and available time for ${h(a.services?.name || 'this booking')}.</p><input id="moveDate" type="date" value="${h(selectedDate)}" min="${h(localDateISO(new Date()))}"><select id="moveTime" class="move-time-select">${slots.length ? slots.map(item => `<option value="${h(item.time)}">${h(item.time)}</option>`).join('') : '<option value="">No available times</option>'}</select><div class="confirmation-actions"><button class="btn secondary" id="cancelMove" type="button">Cancel</button><button class="btn" id="saveMove" type="button" ${slots.length ? '' : 'disabled'}>Move booking</button></div>`; card.querySelector('#moveDate').onchange = event => loadForDate(event.target.value); card.querySelector('#cancelMove').onclick = () => overlay.remove(); card.querySelector('#saveMove').onclick = async () => { const button = card.querySelector('#saveMove'); button.disabled = true; try { await api.rescheduleAppointment(a.id, { dateISO: card.querySelector('#moveDate').value, time: card.querySelector('#moveTime').value }); overlay.remove(); onDone(); } catch (error) { button.disabled = false; alert(`Could not move booking: ${error?.message || 'Unknown error'}`); } }; };
+    await loadForDate(dateISO);
   } catch (error) { overlay.querySelector('.modal-card').innerHTML = `<h3>Could not load times</h3><p class="lead" style="color:#b3261e">${h(error?.message || 'Unknown error')}</p><button class="btn" id="closeMove" type="button">Close</button>`; overlay.querySelector('#closeMove').onclick = () => overlay.remove(); }
 }
 
 async function pageStaffBoard(dateISO) {
+  boardRealtimeCleanup?.();
+  boardRealtimeCleanup = null;
   const myGen = ++renderGen;
   const staff = await requireStaff(myGen);
   if (!staff) return;
@@ -409,7 +413,7 @@ async function pageStaffBoard(dateISO) {
   document.querySelector('[data-refresh-board]')?.addEventListener('click', () => pageStaffBoard(date));
   document.querySelectorAll('[data-appt]').forEach(el => el.onclick = () => {
     const a = appts.find(x => x.id === el.dataset.appt);
-    if (a) showApptModal(a);
+    if (a) showApptModal(a, () => pageStaffBoard(date));
   });
   document.querySelectorAll('[data-move-attention]').forEach(el => el.onclick = () => {
     const a = appts.find(x => x.id === el.dataset.moveAttention);
@@ -418,7 +422,9 @@ async function pageStaffBoard(dateISO) {
   document.querySelectorAll('[data-resolve-attention]').forEach(el => el.onclick = async () => {
     const a = appts.find(x => x.id === el.dataset.resolveAttention);
     if (!a || !confirm('Mark this attention item as resolved? Confirm that the customer has been handled.')) return;
-    try { await api.resolveAppointmentAttention(a.id); pageStaffBoard(date); } catch (error) { alert(`Could not resolve attention item: ${error?.message || 'Unknown error'}`); }
+    const description = prompt('Describe what was done for this customer. This will be saved in booking history:', 'Customer contacted and booking handled');
+    if (description === null) return;
+    try { await api.resolveAppointmentAttention(a.id, { description, archive: true }); pageStaffBoard(date); } catch (error) { alert(`Could not resolve attention item: ${error?.message || 'Unknown error'}`); }
   });
   document.querySelectorAll('[data-report]').forEach(el => el.onclick = async () => {
     const values = await bayDownDetails(el.dataset.report, date);
@@ -462,7 +468,7 @@ async function pageStaffBoard(dateISO) {
   });
   wireNav();
   clearTimeout(boardRefreshTimer);
-  boardRefreshTimer = setTimeout(() => pageStaffBoard(date), 30000);
+  boardRealtimeCleanup = api.watchOperationalChanges(() => { clearTimeout(boardRefreshTimer); boardRefreshTimer = setTimeout(() => pageStaffBoard(date), 250); });
 }
 
 function localDateTimeValue(date) {
@@ -533,6 +539,23 @@ async function bayDownDetails(bayId, dateISO, existing = null) {
       close({ startsAt: start.toISOString(), endsAt: end.toISOString(), reason: overlay.querySelector('#outageReason').value.trim() });
     };
   });
+}
+
+async function pageStaffHistory() {
+  const myGen = ++renderGen;
+  const staff = await requireStaff(myGen);
+  if (!staff) return;
+  try {
+    const history = await api.getBookingHistory();
+    if (myGen !== renderGen) return;
+    app.innerHTML = shell('history', `<div class="eyebrow">Operations</div><h2>Booking history</h2><p class="lead">Completed, moved, cancelled, resolved and archived bookings remain here for reference.</p><div class="history-list">${history.length ? history.map(a => `<article class="history-card"><div class="history-card-head"><strong>${h(a.reference || 'No reference')}</strong><span class="history-status">${h(String(a.status || '').replace('_', ' '))}${a.archived_at ? ' · archived' : ''}</span></div><div class="history-summary"><span>${h(a.services?.name || 'Wash')}</span><span>${h(a.customer_name || a.customer_chat_id || 'Customer')}</span><span>${h(a.scheduled_date || '')} · ${h(fmtTime(new Date(a.scheduled_at)))}</span><span>${h(a.bays?.name || 'Bay')}</span></div><div class="history-events">${(a.events || []).length ? a.events.map(event => `<div class="history-event"><time>${h(new Date(event.created_at).toLocaleString('en-MY'))}</time><span><strong>${h(String(event.event_type).replace('_', ' '))}</strong> — ${h(event.description || '')}</span></div>`).join('') : '<div class="history-event muted">No recorded events yet.</div>'}</div></article>`).join('') : '<p class="lead">No bookings in history yet.</p>'}</div>`);
+    wireNav();
+  } catch (error) {
+    if (myGen !== renderGen) return;
+    app.innerHTML = shell('history', `<div class="eyebrow">Booking history</div><h2>Could not load history</h2><p class="lead" style="color:#b3261e">${h(error?.message || 'Unknown error')}</p><button class="btn" id="retryHistory">Try again</button>`);
+    wireNav();
+    document.getElementById('retryHistory').onclick = pageStaffHistory;
+  }
 }
 async function pageStaffSettings() {
   const myGen = ++renderGen;
@@ -811,12 +834,15 @@ const routes = {
   '#/book': pageCustomerBook,
   '#/staff/login': pageStaffLogin,
   '#/staff/board': pageStaffBoard,
+  '#/staff/history': pageStaffHistory,
   '#/staff/settings': pageStaffSettings,
   '#/staff/organization': pageStaffOrganization,
 };
 
 function router() {
   clearTimeout(boardRefreshTimer);
+  boardRealtimeCleanup?.();
+  boardRealtimeCleanup = null;
   const hash = location.hash || '#/staff/board';
   (routes[hash] ?? pageStaffBoard)();
 }

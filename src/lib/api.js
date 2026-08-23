@@ -268,8 +268,12 @@ export async function updateBayClosure(closureId, { startsAt, endsAt, reason } =
 }
 export async function clearBayClosure(closureId) { if (useSupabase) return supabaseApi.clearBayClosure(closureId); ensureFirebase(); return deleteDoc(doc(firestore, 'bay_closures', closureId)); }
 export async function bringBayUp(bayId) { if (useSupabase) return supabaseApi.bringBayUp(bayId); ensureFirebase(); return updateDoc(doc(firestore, 'bays', bayId), { status: 'open', updated_at: new Date().toISOString() }); }
-export async function resolveAppointmentAttention(id) { if (useSupabase) return supabaseApi.resolveAppointmentAttention(id); ensureFirebase(); return updateDoc(doc(firestore, 'appointments', id), { needs_attention: false, updated_at: new Date().toISOString() }); }
+export async function getBookingHistory() { if (useSupabase) return supabaseApi.getBookingHistory(); ensureFirebase(); const values = await docsFor('appointments'); return values.map(item => ({ ...item, events: [] })); }
+export async function resolveAppointmentAttention(id, options = {}) { if (useSupabase) return supabaseApi.resolveAppointmentAttention(id, options); ensureFirebase(); return updateDoc(doc(firestore, 'appointments', id), { needs_attention: false, updated_at: new Date().toISOString() }); }
 export async function rescheduleAppointment(id, { dateISO, time } = {}) { if (useSupabase) return supabaseApi.rescheduleAppointment(id, { dateISO, time }); ensureFirebase(); throw new Error('Rescheduling is currently available in Supabase mode only.'); }
+export async function updateAppointmentStatus(id, status, description = '') { if (useSupabase) return supabaseApi.updateAppointmentStatus(id, status, description); ensureFirebase(); return updateDoc(doc(firestore, 'appointments', id), { status, updated_at: new Date().toISOString() }); }
+export async function archiveAppointment(id, description = '') { if (useSupabase) return supabaseApi.archiveAppointment(id, description); ensureFirebase(); return updateDoc(doc(firestore, 'appointments', id), { archived_at: new Date().toISOString(), updated_at: new Date().toISOString() }); }
+export function watchOperationalChanges(callback) { return useSupabase ? supabaseApi.watchOperationalChanges(callback) : () => {}; }
 
 // ── Authentication ─────────────────────────────────────────────────
 export async function signInStaff() { return useSupabase ? supabaseApi.signInStaff() : (firebaseConfigured ? firebaseGoogleSignIn() : { mock: true }); }
