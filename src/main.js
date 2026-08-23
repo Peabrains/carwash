@@ -387,7 +387,7 @@ async function pageStaffBoard(dateISO) {
         ${tracks}
       </div>
     </div>
-    ${staff.role === 'owner' ? `<div class="settings-row" style="margin-top:14px">${bays.map(b => { if (b.status === 'maintenance') return `<button class="mini-btn" data-bring-up="${b.id}">Bring ${b.name} back online</button>`; const outage = (closuresByBay[b.id] || []).find(c => new Date(c.ends_at) > new Date()); return outage ? `<button class="mini-btn" data-clear-closure="${outage.id}">End ${b.name} outage</button>` : `<button class="mini-btn" data-report="${b.id}">Report ${b.name} down</button>`; }).join('')}</div>` : ''}
+    ${staff.role === 'owner' ? `<div class="settings-row" style="margin-top:14px">${bays.map(b => b.status === 'maintenance' ? `<button class="mini-btn" data-bring-up="${b.id}">Bring ${b.name} back online</button>` : `<button class="mini-btn" data-report="${b.id}">Report ${b.name} down</button>`).join('')}</div>` : ''}
   `);
   document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => pageStaffBoard(el.dataset.date));
   document.querySelector('[data-refresh-board]')?.addEventListener('click', () => pageStaffBoard(date));
@@ -416,6 +416,12 @@ async function pageStaffBoard(dateISO) {
     const values = await bayDownDetails(closure.bay_id, date, closure);
     if (!values) return;
     try {
+      if (values.delete) {
+        await api.clearBayClosure(closure.id);
+        if (myGen !== renderGen) return;
+        pageStaffBoard(date);
+        return;
+      }
       await api.updateBayClosure(closure.id, values);
       if (myGen !== renderGen) return;
       pageStaffBoard(date);
@@ -482,7 +488,7 @@ async function bayDownDetails(bayId, dateISO, existing = null) {
           <input id="outageReason" value="${existing?.reason || ''}" placeholder="e.g. pressure washer repair">
         </div>
         <div class="settings-row">
-          <button class="btn ghost" id="cancelOutage" type="button">Cancel</button>
+          ${isEditing ? '<button class="btn ghost" id="deleteOutage" type="button">Delete outage</button>' : '<button class="btn ghost" id="cancelOutage" type="button">Cancel</button>'}
           <button class="btn amber" id="saveOutage" type="button">${isEditing ? 'Save changes' : 'Save outage'}</button>
         </div>
       </div>`;
@@ -490,7 +496,8 @@ async function bayDownDetails(bayId, dateISO, existing = null) {
 
     const close = value => { overlay.remove(); resolve(value); };
     overlay.onclick = e => { if (e.target === overlay) close(null); };
-    overlay.querySelector('#cancelOutage').onclick = () => close(null);
+    overlay.querySelector('#cancelOutage')?.addEventListener('click', () => close(null));
+    overlay.querySelector('#deleteOutage')?.addEventListener('click', () => { if (confirm('Delete this bay outage?')) close({ delete: true }); });
     overlay.querySelector('#saveOutage').onclick = () => {
       const start = new Date(`${overlay.querySelector('#outageStartDate').value}T${overlay.querySelector('#outageStartTime').value}`);
       const end = new Date(`${overlay.querySelector('#outageEndDate').value}T${overlay.querySelector('#outageEndTime').value}`);
