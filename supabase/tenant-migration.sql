@@ -38,6 +38,7 @@ alter table blackout_dates add column if not exists provider_id text references 
 alter table blackout_dates add column if not exists location_id text references locations(id) on delete cascade;
 alter table booking_settings add column if not exists provider_id text references providers(id) on delete cascade;
 alter table booking_settings add column if not exists location_id text references locations(id) on delete cascade;
+alter table booking_settings add column if not exists updated_at timestamptz not null default now();
 
 alter table staff add column if not exists email text;
 alter table staff add column if not exists provider_id text references providers(id) on delete set null;
