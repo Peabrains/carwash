@@ -70,7 +70,7 @@ export async function loadSupabaseBookingContext(tenant: Tenant): Promise<Bookin
   return context;
 }
 
-export async function availableSupabaseSlots(context: BookingContext, tenant: Tenant, dateIso: string, service: Service, requestedTime?: string) {
+export async function availableSupabaseSlots(context: BookingContext, tenant: Tenant, dateIso: string, service: Service, requestedTime?: string, excludeAppointmentId?: string) {
   const db = client();
   if (!isDateBookable(dateIso, localDate(), context.settings.max_advance_days)) return [];
   const date = new Date(`${dateIso}T12:00:00+08:00`);
@@ -80,7 +80,7 @@ export async function availableSupabaseSlots(context: BookingContext, tenant: Te
   const [blackoutResult, baysResult, appointmentsResult, breaksResult, closuresResult] = await Promise.all([
     db.from("blackout_dates").select("date,provider_id,location_id").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId).eq("date", dateIso),
     db.from("bays").select("id,is_active,status,provider_id,location_id").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId),
-    db.from("appointments").select("bay_id,scheduled_at,duration_minutes,status,provider_id,location_id").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId).eq("scheduled_date", dateIso).neq("status", "cancelled"),
+    db.from("appointments").select("id,bay_id,scheduled_at,duration_minutes,status,provider_id,location_id").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId).eq("scheduled_date", dateIso).neq("status", "cancelled"),
     db.from("crew_break_schedule").select("bay_id,start_time,duration_minutes,provider_id,location_id").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId),
     db.from("bay_closures").select("bay_id,starts_at,ends_at,provider_id,location_id").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId).lt("starts_at", `${dateIso}T23:59:59+08:00`).gt("ends_at", `${dateIso}T00:00:00+08:00`),
   ]);
@@ -94,7 +94,7 @@ export async function availableSupabaseSlots(context: BookingContext, tenant: Te
     const end = start + service.duration_minutes * 60000;
     if (start < Date.now() + context.settings.min_lead_minutes * 60000) return false;
     return bays.some(bay => {
-      const busy = (appointmentsResult.data || []).some(row => row.bay_id === bay.id && bookingIntervalsOverlap(start, end, asMillis(row.scheduled_at), asMillis(row.scheduled_at) + Number(row.duration_minutes) * 60000, context.settings.buffer_minutes));
+      const busy = (appointmentsResult.data || []).some(row => row.id !== excludeAppointmentId && row.bay_id === bay.id && bookingIntervalsOverlap(start, end, asMillis(row.scheduled_at), asMillis(row.scheduled_at) + Number(row.duration_minutes) * 60000, context.settings.buffer_minutes));
       const breakBusy = (breaksResult.data || []).some(row => row.bay_id === bay.id && intervalsOverlap(start, end, new Date(`${dateIso}T${String(row.start_time).slice(0, 5)}:00+08:00`).getTime(), new Date(`${dateIso}T${String(row.start_time).slice(0, 5)}:00+08:00`).getTime() + Number(row.duration_minutes) * 60000));
       const closureBusy = (closuresResult.data || []).some(row => row.bay_id === bay.id && intervalsOverlap(start, end, asMillis(row.starts_at), asMillis(row.ends_at)));
       return !busy && !breakBusy && !closureBusy;
@@ -139,4 +139,71 @@ export async function reserveSupabaseAppointment(threadId: string, state: Tier1S
     throw new Error(`Supabase booking insert failed: ${insertError.message}`);
   }
   return { status: "created", reference, service };
+}
+
+function normalizePhone(value: string) { return value.replace(/[\s-]/g, "").replace(/^\+/, ""); }
+
+async function publicBookingRow(reference: string, phone: string) {
+  const db = client();
+  const { data: appointment, error } = await db.from("appointments").select("*").eq("reference", reference.trim()).maybeSingle();
+  fail(error, "finding booking");
+  if (!appointment || normalizePhone(String(appointment.customer_phone || "")) !== normalizePhone(phone)) throw new Error("We could not find a booking with that reference and phone number.");
+  return appointment;
+}
+
+async function publicBookingDetails(appointment: Row) {
+  const db = client();
+  const [{ data: service, error: serviceError }, { data: location, error: locationError }] = await Promise.all([
+    db.from("services").select("id,name,duration_minutes,price_myr").eq("id", appointment.service_id).maybeSingle(),
+    db.from("locations").select("id,name,address").eq("id", appointment.location_id).maybeSingle(),
+  ]);
+  fail(serviceError, "loading booking service"); fail(locationError, "loading booking location");
+  return { reference: appointment.reference, status: appointment.status, customer_name: appointment.customer_name, customer_phone: appointment.customer_phone, provider_id: appointment.provider_id, location_id: appointment.location_id, bay_id: appointment.bay_id, scheduled_date: appointment.scheduled_date, scheduled_at: appointment.scheduled_at, duration_minutes: appointment.duration_minutes, price_myr: appointment.price_myr, service, location };
+}
+
+async function choosePublicBay(context: BookingContext, tenant: Tenant, appointment: Row, dateIso: string, time: string) {
+  const db = client();
+  const start = new Date(`${dateIso}T${time}:00+08:00`).getTime();
+  const end = start + Number(appointment.duration_minutes) * 60000;
+  const [baysResult, bookingsResult, breaksResult, closuresResult] = await Promise.all([
+    db.from("bays").select("id,is_active,status").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId),
+    db.from("appointments").select("id,bay_id,scheduled_at,duration_minutes,status").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId).eq("scheduled_date", dateIso).neq("status", "cancelled"),
+    db.from("crew_break_schedule").select("bay_id,start_time,duration_minutes").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId),
+    db.from("bay_closures").select("bay_id,starts_at,ends_at").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId),
+  ]);
+  fail(baysResult.error, "loading bays for booking change"); fail(bookingsResult.error, "loading bookings for booking change"); fail(breaksResult.error, "loading breaks for booking change"); fail(closuresResult.error, "loading closures for booking change");
+  return (baysResult.data || []).filter(row => row.is_active !== false && (!row.status || row.status === "open")).find(bay => {
+    const bookingBusy = (bookingsResult.data || []).some(item => item.id !== appointment.id && item.bay_id === bay.id && bookingIntervalsOverlap(start, end, asMillis(item.scheduled_at), asMillis(item.scheduled_at) + Number(item.duration_minutes) * 60000, context.settings.buffer_minutes));
+    const breakBusy = (breaksResult.data || []).some(item => item.bay_id === bay.id && intervalsOverlap(start, end, new Date(`${dateIso}T${String(item.start_time).slice(0, 5)}:00+08:00`).getTime(), new Date(`${dateIso}T${String(item.start_time).slice(0, 5)}:00+08:00`).getTime() + Number(item.duration_minutes) * 60000));
+    const closureBusy = (closuresResult.data || []).some(item => item.bay_id === bay.id && intervalsOverlap(start, end, asMillis(item.starts_at), asMillis(item.ends_at)));
+    return !bookingBusy && !breakBusy && !closureBusy;
+  });
+}
+
+export async function managePublicBooking({ reference, phone, action, dateIso, time }: { reference: string; phone: string; action: "lookup" | "cancel" | "reschedule"; dateIso?: string; time?: string }) {
+  const db = client();
+  const appointment = await publicBookingRow(reference, phone);
+  if (action === "lookup") return publicBookingDetails(appointment);
+  if (appointment.status === "cancelled") throw new Error("This booking has already been cancelled.");
+  const start = asMillis(appointment.scheduled_at);
+  if (start <= Date.now() + 60 * 60000) throw new Error("This booking is too close to its appointment time to change online. Please contact the car wash.");
+  if (action === "cancel") {
+    const { data: updated, error } = await db.from("appointments").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", appointment.id).select().single();
+    fail(error, "cancelling booking");
+    const { error: eventError } = await db.from("booking_events").insert({ provider_id: appointment.provider_id, location_id: appointment.location_id, appointment_id: appointment.id, reference: appointment.reference, event_type: "status_changed", description: "Customer cancelled the booking online", old_value: { status: appointment.status }, new_value: { status: "cancelled" } });
+    fail(eventError, "recording booking cancellation");
+    return publicBookingDetails(updated);
+  }
+  if (!dateIso || !time || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso) || !/^\d{2}:\d{2}$/.test(time)) throw new Error("Choose a valid new date and time.");
+  const context = await loadSupabaseBookingContext({ providerId: appointment.provider_id, locationId: appointment.location_id });
+  const service = context.services.find(item => item.id === appointment.service_id);
+  if (!service || !(await availableSupabaseSlots(context, { providerId: appointment.provider_id, locationId: appointment.location_id }, dateIso, service, time, appointment.id)).includes(time)) throw new Error("That time is no longer available.");
+  const bay = await choosePublicBay(context, { providerId: appointment.provider_id, locationId: appointment.location_id }, appointment, dateIso, time);
+  if (!bay) throw new Error("That time is no longer available.");
+  const scheduledAt = new Date(`${dateIso}T${time}:00+08:00`).toISOString();
+  const { data: updated, error } = await db.from("appointments").update({ scheduled_date: dateIso, scheduled_at: scheduledAt, bay_id: bay.id, updated_at: new Date().toISOString() }).eq("id", appointment.id).select().single();
+  fail(error, "rescheduling booking");
+  const { error: eventError } = await db.from("booking_events").insert({ provider_id: appointment.provider_id, location_id: appointment.location_id, appointment_id: appointment.id, reference: appointment.reference, event_type: "rescheduled", description: "Customer rescheduled the booking online", old_value: { scheduled_date: appointment.scheduled_date, scheduled_at: appointment.scheduled_at }, new_value: { scheduled_date: dateIso, scheduled_at: scheduledAt } });
+  fail(eventError, "recording booking reschedule");
+  return publicBookingDetails(updated);
 }
