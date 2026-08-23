@@ -268,6 +268,8 @@ export async function updateBayClosure(closureId, { startsAt, endsAt, reason } =
 }
 export async function clearBayClosure(closureId) { if (useSupabase) return supabaseApi.clearBayClosure(closureId); ensureFirebase(); return deleteDoc(doc(firestore, 'bay_closures', closureId)); }
 export async function bringBayUp(bayId) { if (useSupabase) return supabaseApi.bringBayUp(bayId); ensureFirebase(); return updateDoc(doc(firestore, 'bays', bayId), { status: 'open', updated_at: new Date().toISOString() }); }
+export async function resolveAppointmentAttention(id) { if (useSupabase) return supabaseApi.resolveAppointmentAttention(id); ensureFirebase(); return updateDoc(doc(firestore, 'appointments', id), { needs_attention: false, updated_at: new Date().toISOString() }); }
+export async function rescheduleAppointment(id, { dateISO, time } = {}) { if (useSupabase) return supabaseApi.rescheduleAppointment(id, { dateISO, time }); ensureFirebase(); throw new Error('Rescheduling is currently available in Supabase mode only.'); }
 
 // ── Authentication ─────────────────────────────────────────────────
 export async function signInStaff() { return useSupabase ? supabaseApi.signInStaff() : (firebaseConfigured ? firebaseGoogleSignIn() : { mock: true }); }

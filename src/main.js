@@ -259,6 +259,19 @@ function showApptModal(a) {
   document.getElementById('closeModal').onclick = () => overlay.remove();
 }
 
+async function showRescheduleModal(a, dateISO, onDone) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal-card"><h3>Move booking</h3><p class="lead">Choose another available time for ${h(a.services?.name || 'this booking')} on ${h(dateISO)}.</p><p class="lead">Loading available times…</p></div>`;
+  document.body.appendChild(overlay);
+  try {
+    const slots = (await api.getAvailableSlots(dateISO, a.service_id)).filter(item => item.available);
+    overlay.querySelector('.modal-card').innerHTML = `<h3>Move booking</h3><p class="lead">Choose another available time for ${h(a.services?.name || 'this booking')} on ${h(dateISO)}.</p><select id="moveTime" class="move-time-select">${slots.length ? slots.map(item => `<option value="${h(item.time)}">${h(item.time)}</option>`).join('') : '<option value="">No other times available</option>'}</select><div class="confirmation-actions"><button class="btn secondary" id="cancelMove" type="button">Cancel</button><button class="btn" id="saveMove" type="button" ${slots.length ? '' : 'disabled'}>Move booking</button></div>`;
+    overlay.querySelector('#cancelMove').onclick = () => overlay.remove();
+    overlay.querySelector('#saveMove').onclick = async () => { const button = overlay.querySelector('#saveMove'); button.disabled = true; try { await api.rescheduleAppointment(a.id, { dateISO, time: overlay.querySelector('#moveTime').value }); overlay.remove(); onDone(); } catch (error) { button.disabled = false; alert(`Could not move booking: ${error?.message || 'Unknown error'}`); } };
+  } catch (error) { overlay.querySelector('.modal-card').innerHTML = `<h3>Could not load times</h3><p class="lead" style="color:#b3261e">${h(error?.message || 'Unknown error')}</p><button class="btn" id="closeMove" type="button">Close</button>`; overlay.querySelector('#closeMove').onclick = () => overlay.remove(); }
+}
+
 async function pageStaffBoard(dateISO) {
   const myGen = ++renderGen;
   const staff = await requireStaff(myGen);
@@ -317,7 +330,7 @@ async function pageStaffBoard(dateISO) {
   const nowLine = (isToday && nowMin >= dayStart && nowMin <= dayEnd)
     ? `<div class="cal-now-line" style="top:${nowMin - dayStart}px"></div>` : '';
   const attention = appts.filter(a => a.needs_attention && a.status !== 'cancelled');
-  const attentionSection = attention.length ? `<section class="attention-panel"><div class="attention-heading"><span>⚠ Attention required</span><strong>${attention.length}</strong></div><p>These bookings overlap a bay outage and need a staff decision.</p><div class="attention-list">${attention.map(a => `<button class="attention-item" data-appt="${h(a.id)}" type="button"><span><strong>${h(a.services?.name || 'Wash')}</strong> · ${h(a.customer_name || a.customer_chat_id || 'Customer')}</span><span>${h(a.bays?.name || 'Bay')} · ${fmtTime(new Date(a.scheduled_at))}</span></button>`).join('')}</div></section>` : '';
+  const attentionSection = attention.length ? `<section class="attention-panel"><div class="attention-heading"><span>⚠ Attention required</span><strong>${attention.length}</strong></div><p>These bookings overlap a bay outage and need a staff decision.</p><div class="attention-list">${attention.map(a => `<div class="attention-item"><button class="attention-booking" data-appt="${h(a.id)}" type="button"><strong>${h(a.services?.name || 'Wash')}</strong> · ${h(a.customer_name || a.customer_chat_id || 'Customer')}<small>${h(a.bays?.name || 'Bay')} · ${fmtTime(new Date(a.scheduled_at))}</small></button><span class="attention-actions"><button data-move-attention="${h(a.id)}" type="button">Move time</button><button data-resolve-attention="${h(a.id)}" type="button">Resolve</button></span></div>`).join('')}</div></section>` : '';
 
   const heads = bays.map(b => {
     const bookings = byBay[b.id] || [];
@@ -397,6 +410,15 @@ async function pageStaffBoard(dateISO) {
   document.querySelectorAll('[data-appt]').forEach(el => el.onclick = () => {
     const a = appts.find(x => x.id === el.dataset.appt);
     if (a) showApptModal(a);
+  });
+  document.querySelectorAll('[data-move-attention]').forEach(el => el.onclick = () => {
+    const a = appts.find(x => x.id === el.dataset.moveAttention);
+    if (a) showRescheduleModal(a, date, () => pageStaffBoard(date));
+  });
+  document.querySelectorAll('[data-resolve-attention]').forEach(el => el.onclick = async () => {
+    const a = appts.find(x => x.id === el.dataset.resolveAttention);
+    if (!a || !confirm('Mark this attention item as resolved? Confirm that the customer has been handled.')) return;
+    try { await api.resolveAppointmentAttention(a.id); pageStaffBoard(date); } catch (error) { alert(`Could not resolve attention item: ${error?.message || 'Unknown error'}`); }
   });
   document.querySelectorAll('[data-report]').forEach(el => el.onclick = async () => {
     const values = await bayDownDetails(el.dataset.report, date);
