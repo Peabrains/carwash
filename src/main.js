@@ -736,7 +736,7 @@ async function pageStaffOrganization() {
         <div class="field"><label>Email</label><input id="staffEmail" type="email" placeholder="staff@example.com"></div>
         <div class="field"><label>Name</label><input id="staffName" placeholder="Staff name"></div>
         <div class="field"><label>Role</label><select id="staffRole"><option value="worker">Worker</option><option value="manager">Manager</option><option value="owner">Owner</option></select></div>
-      </div><button class="btn compact" id="addStaff">Add or update staff</button>
+        </div><p id="staffMessage" class="lead" role="status"></p><button class="btn compact" id="addStaff">Add or update staff</button>
     </section>` : ''}
 
     ${['platform_owner', 'owner'].includes(staff.role) ? `<section class="management-section">
@@ -777,9 +777,10 @@ async function pageStaffOrganization() {
   document.getElementById('addBay').onclick = async () => {
     try { const name = document.getElementById('newBayName').value.trim(); if (!name) return alert('Enter a bay name.'); await api.saveBay({ name }); refresh(); } catch (error) { showManageError(error); }
   };
-  document.getElementById('addStaff')?.addEventListener('click', async () => {
+  document.getElementById('addStaff')?.addEventListener('click', async event => {
     const email = document.getElementById('staffEmail').value.trim(); if (!email) return alert('Enter the staff email used for Google sign-in.');
-    await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); refresh();
+    const button = event.currentTarget; const message = document.getElementById('staffMessage'); button.disabled = true; message.textContent = 'Saving staff access…';
+    try { await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); message.textContent = 'Staff access saved.'; refresh(); } catch (error) { message.textContent = `Could not save staff access: ${error?.message || 'Unknown error'}`; } finally { button.disabled = false; }
   });
   document.getElementById('addProvider')?.addEventListener('click', async () => {
     try { const name = document.getElementById('newProviderName').value.trim(); if (!name) return alert('Enter a provider name.'); await api.createProvider({ name }); state.tenants = await api.getAccessibleTenants(staff); refresh(); } catch (error) { showManageError(error); }
