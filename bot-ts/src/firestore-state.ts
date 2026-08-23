@@ -7,7 +7,12 @@ function database() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is required for durable bot state");
   if (!getApps().length) initializeApp({ credential: cert(JSON.parse(raw)) });
-  return getFirestore();
+  const firestore = getFirestore();
+  // Chat SDK entries can contain optional fields (for example author.isSystem)
+  // that are intentionally undefined. Firestore rejects undefined nested values
+  // unless this compatibility option is enabled.
+  firestore.settings({ ignoreUndefinedProperties: true });
+  return firestore;
 }
 
 function keyId(key: string) {

@@ -1,5 +1,6 @@
 import './style.css';
 import * as api from './lib/api.js';
+import { createBooking, loadCatalogue, loadSlots } from './lib/public-booking.js';
 
 // The generated registerSW.js only calls navigator.serviceWorker.register()
 // with no update-detection at all, so a new deploy's service worker sits
@@ -711,6 +712,38 @@ async function pageStaffOrganization() {
   wireNav();
 }
 
+async function pageCustomerBook() {
+  app.innerHTML = `<div class="app-shell"><div class="topbar"><div class="brand"><div class="drop"></div>Wash Point</div></div><div class="screen"><div class="eyebrow">Customer booking</div><h2>Book a car wash</h2><p class="lead">Compare services and choose an available slot.</p><div id="customerBook" class="card">Loading providers…</div></div></div>`;
+  const root = document.getElementById('customerBook');
+  try {
+    const catalogue = await loadCatalogue();
+    const providers = catalogue.providers || [];
+    const locations = catalogue.locations || [];
+    const services = catalogue.services || [];
+    if (!providers.length || !locations.length || !services.length) throw new Error('No bookable providers are available yet.');
+    root.innerHTML = `
+      <form id="customerForm">
+        <div class="field"><label for="customerProvider">Provider</label><select id="customerProvider" required>${providers.map(item => `<option value="${h(item.id)}">${h(item.name)}</option>`).join('')}</select></div>
+        <div class="field"><label for="customerLocation">Location</label><select id="customerLocation" required></select></div>
+        <div class="field"><label for="customerService">Service</label><select id="customerService" required></select></div>
+        <div class="field"><label for="customerDate">Date</label><input id="customerDate" type="date" required></div>
+        <div class="field"><label for="customerTime">Available time</label><select id="customerTime" required><option value="">Choose a date first</option></select></div>
+        <div class="field"><label for="customerName">Name</label><input id="customerName" autocomplete="name" required></div>
+        <div class="field"><label for="customerPhone">Malaysian mobile number</label><input id="customerPhone" type="tel" placeholder="012-3456789" autocomplete="tel" required></div>
+        <p id="customerMessage" class="lead" role="status"></p>
+        <button class="btn" type="submit">Book this slot</button>
+      </form>`;
+    const providerEl = document.getElementById('customerProvider'); const locationEl = document.getElementById('customerLocation'); const serviceEl = document.getElementById('customerService'); const dateEl = document.getElementById('customerDate'); const timeEl = document.getElementById('customerTime'); const messageEl = document.getElementById('customerMessage');
+    dateEl.min = localDateISO(new Date());
+    dateEl.max = shiftDate(dateEl.min, 14);
+    const refreshLocations = () => { const filtered = locations.filter(item => item.provider_id === providerEl.value); locationEl.innerHTML = filtered.map(item => `<option value="${h(item.id)}">${h(item.name)}${item.address ? ` — ${h(item.address)}` : ''}</option>`).join(''); refreshServices(); };
+    const refreshServices = () => { const filtered = services.filter(item => item.provider_id === providerEl.value && item.location_id === locationEl.value); serviceEl.innerHTML = filtered.map(item => `<option value="${h(item.id)}">${h(item.name)} — ${item.duration_minutes} min · RM ${Number(item.price_myr).toFixed(2)}</option>`).join(''); refreshSlots(); };
+    const refreshSlots = async () => { timeEl.innerHTML = '<option value="">Loading available times…</option>'; if (!locationEl.value || !serviceEl.value || !dateEl.value) return; try { const result = await loadSlots({ providerId: providerEl.value, locationId: locationEl.value, serviceId: serviceEl.value, date: dateEl.value }); timeEl.innerHTML = result.slots.length ? result.slots.map(time => `<option value="${h(time)}">${h(time)}</option>`).join('') : '<option value="">No available times</option>'; } catch (error) { timeEl.innerHTML = '<option value="">Could not load times</option>'; messageEl.textContent = error.message; } };
+    providerEl.onchange = refreshLocations; locationEl.onchange = refreshServices; serviceEl.onchange = refreshSlots; dateEl.onchange = refreshSlots; refreshLocations();
+    document.getElementById('customerForm').onsubmit = async event => { event.preventDefault(); messageEl.textContent = 'Checking the slot…'; try { const result = await createBooking({ provider_id: providerEl.value, location_id: locationEl.value, service_id: serviceEl.value, date: dateEl.value, time: timeEl.value, name: document.getElementById('customerName').value, phone: document.getElementById('customerPhone').value }); messageEl.textContent = `Booking confirmed. Reference: ${result.reference}`; event.target.querySelector('button').disabled = true; } catch (error) { messageEl.textContent = error.message; } };
+  } catch (error) { root.innerHTML = `<p class="lead" style="color:#b3261e">${h(error.message)}</p>`; }
+}
+
 // Direct per-element handlers, not window-level delegation — every other
 // interactive element in this app is wired this way already; the nav bar
 // was the one exception, and reports of it not responding on mobile are
@@ -731,6 +764,7 @@ function wireNav() {
 
 // ── Router ───────────────────────────────────────────────────────────
 const routes = {
+  '#/book': pageCustomerBook,
   '#/staff/login': pageStaffLogin,
   '#/staff/board': pageStaffBoard,
   '#/staff/settings': pageStaffSettings,
