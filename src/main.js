@@ -461,7 +461,8 @@ async function pageStaffBoard(dateISO) {
         pageStaffBoard(date);
         return;
       }
-      await api.updateBayClosure(closure.id, values);
+      const updated = await api.updateBayClosure(closure.id, values);
+      if (updated?.flagged) alert(`Outage updated. ${updated.flagged} booking(s) now require attention.`);
       if (myGen !== renderGen) return;
       pageStaffBoard(date);
     } catch (error) { alert(`Could not update bay outage: ${error?.message || 'Unknown error'}`); }
