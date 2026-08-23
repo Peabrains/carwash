@@ -316,6 +316,8 @@ async function pageStaffBoard(dateISO) {
   }
   const nowLine = (isToday && nowMin >= dayStart && nowMin <= dayEnd)
     ? `<div class="cal-now-line" style="top:${nowMin - dayStart}px"></div>` : '';
+  const attention = appts.filter(a => a.needs_attention && a.status !== 'cancelled');
+  const attentionSection = attention.length ? `<section class="attention-panel"><div class="attention-heading"><span>⚠ Attention required</span><strong>${attention.length}</strong></div><p>These bookings overlap a bay outage and need a staff decision.</p><div class="attention-list">${attention.map(a => `<button class="attention-item" data-appt="${h(a.id)}" type="button"><span><strong>${h(a.services?.name || 'Wash')}</strong> · ${h(a.customer_name || a.customer_chat_id || 'Customer')}</span><span>${h(a.bays?.name || 'Bay')} · ${fmtTime(new Date(a.scheduled_at))}</span></button>`).join('')}</div></section>` : '';
 
   const heads = bays.map(b => {
     const bookings = byBay[b.id] || [];
@@ -379,6 +381,7 @@ async function pageStaffBoard(dateISO) {
       <button data-refresh-board type="button">Refresh</button>
     </div>
     ${isToday ? '<p class="lead">Tags show real-time walk-in availability. Gray blocks are scheduled crew breaks.</p>' : ''}
+    ${attentionSection}
     <div class="cal-wrap">
       <div class="cal-grid" style="grid-template-columns:44px repeat(${bays.length},minmax(140px,1fr))">
         <div class="cal-gutter-head"></div>
