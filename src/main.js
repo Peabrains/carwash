@@ -753,38 +753,31 @@ async function pageStaffOrganization() {
   `);
 
   const refresh = () => pageStaffOrganization();
+  const showManageError = error => alert(`Could not save this change: ${error?.message || 'Unknown error'}`);
   document.getElementById('saveLocation').onclick = async () => {
-    await api.updateLocation(tenant.locationId, { name: document.getElementById('locationName').value.trim(), address: document.getElementById('locationAddress').value.trim(), timezone: document.getElementById('locationTimezone').value.trim() });
-    state.tenants = await api.getAccessibleTenants(staff); refresh();
+    try { await api.updateLocation(tenant.locationId, { name: document.getElementById('locationName').value.trim(), address: document.getElementById('locationAddress').value.trim(), timezone: document.getElementById('locationTimezone').value.trim() }); state.tenants = await api.getAccessibleTenants(staff); refresh(); } catch (error) { showManageError(error); }
   };
   document.querySelectorAll('[data-save-service]').forEach(button => button.onclick = async () => {
-    const row = document.querySelector(`[data-service-row="${CSS.escape(button.dataset.saveService)}"]`);
-    await api.saveService({ id: button.dataset.saveService, name: row.querySelector('[data-field="name"]').value, durationMinutes: row.querySelector('[data-field="duration"]').value, priceMyr: row.querySelector('[data-field="price"]').value, isActive: row.querySelector('[data-field="active"]').checked }); refresh();
+    try { const row = document.querySelector(`[data-service-row="${CSS.escape(button.dataset.saveService)}"]`); await api.saveService({ id: button.dataset.saveService, name: row.querySelector('[data-field="name"]').value, durationMinutes: row.querySelector('[data-field="duration"]').value, priceMyr: row.querySelector('[data-field="price"]').value, isActive: row.querySelector('[data-field="active"]').checked }); refresh(); } catch (error) { showManageError(error); }
   });
   document.getElementById('addService').onclick = async () => {
-    const name = document.getElementById('newServiceName').value.trim(); if (!name) return alert('Enter a service name.');
-    await api.saveService({ name, durationMinutes: document.getElementById('newServiceDuration').value, priceMyr: document.getElementById('newServicePrice').value }); refresh();
+    try { const name = document.getElementById('newServiceName').value.trim(); if (!name) return alert('Enter a service name.'); await api.saveService({ name, durationMinutes: document.getElementById('newServiceDuration').value, priceMyr: document.getElementById('newServicePrice').value }); refresh(); } catch (error) { showManageError(error); }
   };
   document.querySelectorAll('[data-save-bay]').forEach(button => button.onclick = async () => {
-    const row = document.querySelector(`[data-bay-row="${CSS.escape(button.dataset.saveBay)}"]`);
-    await api.saveBay({ id: button.dataset.saveBay, name: row.querySelector('[data-field="name"]').value, status: row.querySelector('[data-field="status"]').value, isActive: row.querySelector('[data-field="active"]').checked }); refresh();
+    try { const row = document.querySelector(`[data-bay-row="${CSS.escape(button.dataset.saveBay)}"]`); await api.saveBay({ id: button.dataset.saveBay, name: row.querySelector('[data-field="name"]').value, status: row.querySelector('[data-field="status"]').value, isActive: row.querySelector('[data-field="active"]').checked }); refresh(); } catch (error) { showManageError(error); }
   });
   document.getElementById('addBay').onclick = async () => {
-    const name = document.getElementById('newBayName').value.trim(); if (!name) return alert('Enter a bay name.');
-    await api.saveBay({ name }); refresh();
+    try { const name = document.getElementById('newBayName').value.trim(); if (!name) return alert('Enter a bay name.'); await api.saveBay({ name }); refresh(); } catch (error) { showManageError(error); }
   };
   document.getElementById('addStaff')?.addEventListener('click', async () => {
     const email = document.getElementById('staffEmail').value.trim(); if (!email) return alert('Enter the staff email used for Google sign-in.');
     await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); refresh();
   });
   document.getElementById('addProvider')?.addEventListener('click', async () => {
-    const name = document.getElementById('newProviderName').value.trim(); if (!name) return alert('Enter a provider name.');
-    await api.createProvider({ name }); state.tenants = await api.getAccessibleTenants(staff); refresh();
+    try { const name = document.getElementById('newProviderName').value.trim(); if (!name) return alert('Enter a provider name.'); await api.createProvider({ name }); state.tenants = await api.getAccessibleTenants(staff); refresh(); } catch (error) { showManageError(error); }
   });
   document.getElementById('addLocation')?.addEventListener('click', async () => {
-    const name = document.getElementById('newLocationName').value.trim(); if (!name) return alert('Enter a location name.');
-    const created = await api.createLocation({ name, address: document.getElementById('newLocationAddress').value });
-    api.setActiveTenant(created.provider_id, created.id); state.tenants = await api.getAccessibleTenants(staff); refresh();
+    try { const name = document.getElementById('newLocationName').value.trim(); if (!name) return alert('Enter a location name.'); const created = await api.createLocation({ name, address: document.getElementById('newLocationAddress').value }); api.setActiveTenant(created.provider_id, created.id); state.tenants = await api.getAccessibleTenants(staff); refresh(); } catch (error) { showManageError(error); }
   });
   wireNav();
 }
