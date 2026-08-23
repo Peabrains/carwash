@@ -67,8 +67,8 @@ export async function getAvailableSlots(dateISO, serviceId) {
 }
 
 export async function reportBayDown(bayId, { startsAt, endsAt, reason } = {}) { const db = ensureSupabase(); const { data, error } = await db.from('bay_closures').insert({ ...scope(), bay_id: bayId, starts_at: startsAt, ends_at: endsAt, reason: reason || null }).select().single(); errorOrThrow(error, 'reporting bay outage'); return { flagged: 0, id: data.id }; }
-export async function updateBayClosure(closureId, { startsAt, endsAt, reason } = {}) { const db = ensureSupabase(); const { data, error } = await db.from('bay_closures').update({ starts_at: startsAt, ends_at: endsAt, reason: reason || null, updated_at: new Date().toISOString() }).eq('id', closureId).select().single(); errorOrThrow(error, 'updating bay outage'); return data; }
-export async function clearBayClosure(closureId) { const db = ensureSupabase(); const { error } = await db.from('bay_closures').delete().eq('id', closureId); errorOrThrow(error, 'clearing bay outage'); }
+export async function updateBayClosure(closureId, { startsAt, endsAt, reason } = {}) { const db = ensureSupabase(); const { data, error } = await db.from('bay_closures').update({ starts_at: startsAt, ends_at: endsAt, reason: reason || null }).eq('id', closureId).select().single(); errorOrThrow(error, 'updating bay outage'); return data; }
+export async function clearBayClosure(closureId) { const db = ensureSupabase(); const { data, error } = await db.from('bay_closures').delete().eq('id', closureId).select('id'); errorOrThrow(error, 'clearing bay outage'); if (!data?.length) throw new Error('The outage was not deleted. It may already be gone or you may not have permission.'); }
 export async function bringBayUp(bayId) { const db = ensureSupabase(); const { data, error } = await db.from('bays').update({ status: 'open', updated_at: new Date().toISOString() }).eq('id', bayId).select().single(); errorOrThrow(error, 'bringing bay back up'); return data; }
 
 export async function signInStaff() { return supabaseGoogleSignIn(); }

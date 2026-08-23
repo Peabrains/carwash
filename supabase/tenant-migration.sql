@@ -25,6 +25,7 @@ alter table bays add column if not exists provider_id text references providers(
 alter table bays add column if not exists location_id text references locations(id) on delete cascade;
 alter table bay_closures add column if not exists provider_id text references providers(id) on delete cascade;
 alter table bay_closures add column if not exists location_id text references locations(id) on delete cascade;
+alter table bay_closures add column if not exists updated_at timestamptz not null default now();
 alter table crew_break_schedule add column if not exists provider_id text references providers(id) on delete cascade;
 alter table crew_break_schedule add column if not exists location_id text references locations(id) on delete cascade;
 alter table services add column if not exists provider_id text references providers(id) on delete cascade;

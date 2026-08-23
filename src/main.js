@@ -31,6 +31,7 @@ const h = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp
 // pageStaffBoard did two sequential awaits before rendering, and whichever
 // render finished LAST used to win, not whichever was clicked last.
 let renderGen = 0;
+let boardRefreshTimer = null;
 
 // ── Shell ────────────────────────────────────────────────────────────
 function shell(navActive, innerHTML) {
@@ -375,6 +376,7 @@ async function pageStaffBoard(dateISO) {
       <button data-date="${shiftDate(date, -1)}">&larr; Prev</button>
       <div class="current">${fmtDateLabel(date, isToday)}</div>
       <button data-date="${shiftDate(date, 1)}">Next &rarr;</button>
+      <button data-refresh-board type="button">Refresh</button>
     </div>
     ${isToday ? '<p class="lead">Tags show real-time walk-in availability. Gray blocks are scheduled crew breaks.</p>' : ''}
     <div class="cal-wrap">
@@ -388,6 +390,7 @@ async function pageStaffBoard(dateISO) {
     ${staff.role === 'owner' ? `<div class="settings-row" style="margin-top:14px">${bays.map(b => { if (b.status === 'maintenance') return `<button class="mini-btn" data-bring-up="${b.id}">Bring ${b.name} back online</button>`; const outage = (closuresByBay[b.id] || []).find(c => new Date(c.ends_at) > new Date()); return outage ? `<button class="mini-btn" data-clear-closure="${outage.id}">End ${b.name} outage</button>` : `<button class="mini-btn" data-report="${b.id}">Report ${b.name} down</button>`; }).join('')}</div>` : ''}
   `);
   document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => pageStaffBoard(el.dataset.date));
+  document.querySelector('[data-refresh-board]')?.addEventListener('click', () => pageStaffBoard(date));
   document.querySelectorAll('[data-appt]').forEach(el => el.onclick = () => {
     const a = appts.find(x => x.id === el.dataset.appt);
     if (a) showApptModal(a);
@@ -395,10 +398,12 @@ async function pageStaffBoard(dateISO) {
   document.querySelectorAll('[data-report]').forEach(el => el.onclick = async () => {
     const values = await bayDownDetails(el.dataset.report, date);
     if (!values) return;
-    const res = await api.reportBayDown(el.dataset.report, values);
-    if (myGen !== renderGen) return;
-    alert(`Bay outage recorded. ${res.flagged ?? 0} booking(s) were checked for reassignment.`);
-    pageStaffBoard(date);
+    try {
+      const res = await api.reportBayDown(el.dataset.report, values);
+      if (myGen !== renderGen) return;
+      alert(`Bay outage recorded. ${res.flagged ?? 0} booking(s) were checked for reassignment.`);
+      pageStaffBoard(date);
+    } catch (error) { alert(`Could not save bay outage: ${error?.message || 'Unknown error'}`); }
   });
   document.querySelectorAll('[data-bring-up]').forEach(el => el.onclick = async () => {
     await api.bringBayUp(el.dataset.bringUp);
@@ -410,17 +415,23 @@ async function pageStaffBoard(dateISO) {
     if (!closure) return;
     const values = await bayDownDetails(closure.bay_id, date, closure);
     if (!values) return;
-    await api.updateBayClosure(closure.id, values);
-    if (myGen !== renderGen) return;
-    pageStaffBoard(date);
+    try {
+      await api.updateBayClosure(closure.id, values);
+      if (myGen !== renderGen) return;
+      pageStaffBoard(date);
+    } catch (error) { alert(`Could not update bay outage: ${error?.message || 'Unknown error'}`); }
   });
   document.querySelectorAll('[data-clear-closure]').forEach(el => el.onclick = async () => {
     if (!confirm('End this bay outage early?')) return;
-    await api.clearBayClosure(el.dataset.clearClosure);
-    if (myGen !== renderGen) return;
-    pageStaffBoard(date);
+    try {
+      await api.clearBayClosure(el.dataset.clearClosure);
+      if (myGen !== renderGen) return;
+      pageStaffBoard(date);
+    } catch (error) { alert(`Could not delete bay outage: ${error?.message || 'Unknown error'}`); }
   });
   wireNav();
+  clearTimeout(boardRefreshTimer);
+  boardRefreshTimer = setTimeout(() => pageStaffBoard(date), 30000);
 }
 
 function localDateTimeValue(date) {
@@ -773,6 +784,7 @@ const routes = {
 };
 
 function router() {
+  clearTimeout(boardRefreshTimer);
   const hash = location.hash || '#/staff/board';
   (routes[hash] ?? pageStaffBoard)();
 }
