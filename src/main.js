@@ -690,11 +690,16 @@ async function pageStaffOrganization() {
     <button class="mini-btn" data-save-bay="${h(bay.id)}">Save</button>
   </div>`).join('') || '<p class="lead">No bays configured for this location.</p>';
   const staffRows = staffMembers.map(member => `<div class="settings-row"><div><strong>${h(member.name || member.email || member.id)}</strong><div class="muted">${h(member.email || member.id)} · ${h(member.role)}</div></div><span class="tag ${member.is_active === false ? 'busy' : ''}">${member.is_active === false ? 'Inactive' : 'Active'}</span></div>`).join('') || '<p class="lead">No staff assigned to this location.</p>';
+  const providerProfileSection = ['platform_owner', 'owner'].includes(staff.role)
+    ? `<section class="management-section"><h3>Provider profile</h3><p class="lead">This is what customers see in the provider catalogue.</p><div class="manage-form two-col"><div class="field"><label>Provider name</label><input id="providerName" value="${h(provider?.name || '')}"></div><div class="field span-two"><label>Description</label><input id="providerDescription" value="${h(provider?.description || '')}" placeholder="What makes this car wash different?"></div></div><button class="btn compact" id="saveProviderProfile">Save provider profile</button></section>`
+    : `<section class="management-section"><h3>Provider profile</h3><p class="lead">${h(provider?.name || tenant.providerId)}${provider?.description ? ` — ${h(provider.description)}` : ''}</p></section>`;
 
   app.innerHTML = shell('organization', `
     <div class="eyebrow">Management</div>
     <h2>${h(provider?.name || tenant.providerId)}</h2>
     <p class="lead">Manage the selected location. Every change is isolated to this provider and location.</p>
+
+    ${providerProfileSection}
 
     <section class="management-section">
       <h3>Location</h3>
@@ -726,7 +731,7 @@ async function pageStaffOrganization() {
     </section>
 
     ${staff.role !== 'manager' ? `<section class="management-section">
-      <h3>Staff</h3><div class="manage-list">${staffRows}</div>
+      <h3>Staff access</h3><p class="lead">A staff member must sign in with Google once before you add them here. Then assign their role and location access.</p><div class="manage-list">${staffRows}</div>
       <div class="manage-form three-col">
         <div class="field"><label>Email</label><input id="staffEmail" type="email" placeholder="staff@example.com"></div>
         <div class="field"><label>Name</label><input id="staffName" placeholder="Staff name"></div>
@@ -754,6 +759,9 @@ async function pageStaffOrganization() {
 
   const refresh = () => pageStaffOrganization();
   const showManageError = error => alert(`Could not save this change: ${error?.message || 'Unknown error'}`);
+  document.getElementById('saveProviderProfile')?.addEventListener('click', async () => {
+    try { await api.updateProvider(tenant.providerId, { name: document.getElementById('providerName').value.trim(), description: document.getElementById('providerDescription').value.trim() }); state.tenants = await api.getAccessibleTenants(staff); refresh(); } catch (error) { showManageError(error); }
+  });
   document.getElementById('saveLocation').onclick = async () => {
     try { await api.updateLocation(tenant.locationId, { name: document.getElementById('locationName').value.trim(), address: document.getElementById('locationAddress').value.trim(), timezone: document.getElementById('locationTimezone').value.trim() }); state.tenants = await api.getAccessibleTenants(staff); refresh(); } catch (error) { showManageError(error); }
   };
