@@ -710,7 +710,7 @@ async function pageStaffOrganization() {
     <section class="management-section">
       <h3>Services</h3>
       <p class="lead">Name, wash duration, price (RM), and whether customers can book it.</p>
-      <div class="manage-service-head" aria-hidden="true"><span>Name</span><span>Dur</span><span>RM</span><span>Book</span><span></span></div><div class="manage-list">${serviceRows}</div>
+      <div class="manage-service-head" aria-hidden="true"><span>Name</span><span>Dur</span><span>RM</span><span>Book</span><span>Save</span></div><div class="manage-list">${serviceRows}</div>
       <div class="manage-grid manage-service new-row">
         <label class="manage-control"><span>Service</span><input id="newServiceName" placeholder="New service"></label>
         <label class="manage-control"><span>Dur</span><input id="newServiceDuration" type="number" min="1" value="30" aria-label="Duration"></label>

@@ -392,7 +392,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .manage-service input{padding:8px 6px;font-size:12px;}
   .manage-service .manage-control:first-child{grid-column:auto;}
   .manage-service .check{grid-column:auto;}
-  .manage-service .mini-btn{min-height:34px;padding:6px 4px;font-size:9.5px;}
+  .manage-service .mini-btn{grid-column:auto;min-height:34px;padding:6px 4px;font-size:9.5px;}
   .manage-bay{grid-template-columns:1fr 110px;}
   .manage-bay input:first-child{grid-column:1/-1;}
   .manage-grid .mini-btn{margin:0;}
