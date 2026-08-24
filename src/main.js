@@ -42,13 +42,13 @@ function shell(navActive, innerHTML) {
   const currentProvider = state.tenants.providers?.find(item => item.id === tenant.providerId);
   const tenantOptions = locations.map(location => {
     const provider = state.tenants.providers?.find(item => item.id === location.provider_id);
-    return `<option value="${h(location.provider_id)}|${h(location.id)}" ${location.id === tenant.locationId ? 'selected' : ''}>${h(provider?.name || location.provider_id)} · ${h(location.name)}</option>`;
+    return `<option value="${h(location.provider_id)}|${h(location.id)}" ${location.id === tenant.locationId ? 'selected' : ''}>${h(location.name)}</option>`;
   }).join('');
   return `
     <div class="app-shell">
       <div class="topbar">
         <div class="brand"><div class="drop"></div>Docket</div>
-        ${navActive && tenantOptions ? `<div class="tenant-picker"><span>${h(currentProvider?.name || '')}</span><select id="tenantSelect" aria-label="Active location">${tenantOptions}</select><small>${h(currentLocation?.address || '')}</small></div>` : ''}
+        ${navActive && tenantOptions ? `<div class="tenant-picker"><span>${h(currentProvider?.name || '')}</span><select id="tenantSelect" aria-label="Active location">${tenantOptions}</select>${currentLocation?.address ? `<small>${h(currentLocation.address)}</small>` : ''}</div>` : ''}
       </div>
       <div class="screen">${innerHTML}</div>
       ${navActive ? `
