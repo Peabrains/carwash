@@ -680,9 +680,9 @@ async function pageStaffOrganization() {
     <button class="mini-btn" data-save-service="${h(service.id)}">Save</button>
   </div>`).join('') || '<p class="lead">No services configured for this location.</p>';
   const bayRows = bays.map(bay => `<div class="manage-grid manage-bay" data-bay-row="${h(bay.id)}">
-    <input data-field="name" value="${h(bay.name)}" aria-label="Bay name">
-    <select data-field="status"><option value="open" ${bay.status !== 'maintenance' ? 'selected' : ''}>Open</option><option value="maintenance" ${bay.status === 'maintenance' ? 'selected' : ''}>Maintenance</option></select>
-    <label class="check"><input data-field="active" type="checkbox" ${bay.is_active !== false ? 'checked' : ''}> Active</label>
+    <label class="manage-control"><span>Bay</span><input data-field="name" value="${h(bay.name)}" aria-label="Bay name"></label>
+    <label class="manage-control"><span>Status</span><select data-field="status"><option value="open" ${bay.status !== 'maintenance' ? 'selected' : ''}>Open</option><option value="maintenance" ${bay.status === 'maintenance' ? 'selected' : ''}>Maintenance</option></select></label>
+    <label class="check bay-active"><input data-field="active" type="checkbox" ${bay.is_active !== false ? 'checked' : ''}><span>Active</span></label>
     <button class="mini-btn" data-save-bay="${h(bay.id)}">Save</button>
   </div>`).join('') || '<p class="lead">No bays configured for this location.</p>';
   const staffRows = staffMembers.map(member => `<div class="settings-row"><div><strong>${h(member.name || member.email || member.id)}</strong><div class="muted">${h(member.email || member.id)} · ${h(member.role)}</div></div><span class="tag ${member.is_active === false ? 'busy' : ''}">${member.is_active === false ? 'Inactive' : 'Active'}</span></div>`).join('') || '<p class="lead">No staff assigned to this location.</p>';
@@ -722,8 +722,8 @@ async function pageStaffOrganization() {
     <section class="management-section">
       <h3>Bays</h3>
       <p class="lead">Inactive bays are hidden completely. Maintenance bays stay visible but cannot accept bookings.</p>
-      <div class="manage-list">${bayRows}</div>
-      <div class="manage-grid manage-bay new-row"><input id="newBayName" placeholder="New bay"><span>Open</span><span>Active</span><button class="mini-btn" id="addBay">Add</button></div>
+      <div class="manage-bay-head" aria-hidden="true"><span>Name</span><span>Status</span><span>Active</span><span>Save</span></div><div class="manage-list">${bayRows}</div>
+      <div class="manage-grid manage-bay new-row"><label class="manage-control"><span>Bay</span><input id="newBayName" placeholder="New bay"></label><span class="new-bay-status">Open</span><span></span><button class="mini-btn" id="addBay">Add</button></div>
     </section>
 
     ${staff.role !== 'manager' ? `<section class="management-section">

@@ -73,11 +73,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 /* Fixed positioning takes this out of flow, so .screen's bottom padding
    (90px) is what actually reserves space for it — always on, never hidden
    by a layout flag, since staff pages always need navigation. */
-.navbar{display:flex;justify-content:space-around;position:fixed;bottom:12px;left:12px;right:12px;z-index:20;isolation:isolate;overflow:hidden;max-width:456px;margin:0 auto;padding:7px;border:1px solid rgba(255,255,255,.82);border-radius:22px;background:linear-gradient(145deg,rgba(255,255,255,.62),rgba(238,247,241,.34));box-shadow:0 14px 34px rgba(18,52,58,.22),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -1px 0 rgba(40,112,94,.12);backdrop-filter:blur(24px) saturate(1.55);-webkit-backdrop-filter:blur(24px) saturate(1.55);}
-.navbar::before{content:'';position:absolute;z-index:-1;inset:0;background:radial-gradient(circle at 18% 0,rgba(255,255,255,.9),transparent 38%),linear-gradient(100deg,transparent 20%,rgba(255,255,255,.34) 48%,transparent 76%);pointer-events:none;}
+.navbar{display:flex;justify-content:space-around;position:fixed;bottom:12px;left:12px;right:12px;z-index:20;isolation:isolate;overflow:hidden;max-width:456px;margin:0 auto;padding:7px;border:1px solid rgba(255,255,255,.9);border-radius:22px;background:linear-gradient(145deg,rgba(222,239,230,.58),rgba(255,255,255,.32));box-shadow:0 16px 36px rgba(18,52,58,.24),inset 0 1px 1px rgba(255,255,255,1),inset 0 -1px 0 rgba(40,112,94,.16);backdrop-filter:blur(30px) saturate(1.7);-webkit-backdrop-filter:blur(30px) saturate(1.7);}
+.navbar::before{content:'';position:absolute;z-index:-1;inset:0;background:radial-gradient(ellipse at 14% -25%,rgba(255,255,255,1),transparent 44%),linear-gradient(108deg,rgba(255,255,255,.12) 16%,rgba(255,255,255,.54) 48%,rgba(40,112,94,.09) 76%);pointer-events:none;}
+.navbar::after{content:'';position:absolute;left:9%;right:9%;top:1px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.95),transparent);pointer-events:none;}
 .navbar .item{flex:1;min-width:0;font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;background:transparent;border:0;border-radius:16px;padding:9px 5px;font-family:inherit;transition:background-color .2s ease,color .2s ease,transform .2s ease,box-shadow .2s ease;-webkit-tap-highlight-color:rgba(40,112,94,.15);}
 .navbar .item:hover{background:rgba(216,230,109,.35);color:#12343A;}
-.navbar .item.active{color:#17363B;background:rgba(216,230,109,.86);transform:translateY(-3px);box-shadow:0 5px 14px rgba(181,201,76,.38),inset 0 1px 0 rgba(255,255,255,.6);animation:glass-nav-pop .34s cubic-bezier(.2,.85,.25,1.25);}
+.navbar .item.active{color:#17363B;background:linear-gradient(145deg,rgba(229,239,145,.92),rgba(199,218,83,.72));transform:translateY(-3px);box-shadow:0 6px 16px rgba(137,158,52,.34),inset 0 1px 1px rgba(255,255,255,.78);animation:glass-nav-pop .38s cubic-bezier(.2,.85,.25,1.25);}
 .navbar .item:active{transform:scale(.95);}
 @keyframes glass-nav-pop{0%{transform:translateY(1px) scale(.94);opacity:.7}70%{transform:translateY(-4px) scale(1.03)}100%{transform:translateY(-3px) scale(1);opacity:1}}
 @media (prefers-reduced-motion:reduce){.navbar .item{transition:none}.navbar .item.active{animation:none}}
@@ -353,6 +354,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .manage-service .mini-btn{align-self:center;margin:0;border:0;border-radius:8px;background:#D8E66D;color:#17363B;min-height:36px;padding:7px 8px;}
 .service-active span{display:none;}
 .service-active input{width:22px!important;height:22px;accent-color:#28705E;}
+.manage-bay-head{display:grid;grid-template-columns:minmax(120px,1fr) 110px 58px 50px;gap:7px;margin:12px 8px 5px;color:#71817C;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
+.manage-bay{grid-template-columns:minmax(120px,1fr) 110px 58px 50px;gap:7px;}
+.manage-bay .manage-control>span{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+.manage-bay .check{justify-content:center;}
+.bay-active span{display:none;}
+.bay-active input{width:22px!important;height:22px;accent-color:#28705E;}
+.manage-bay .mini-btn{align-self:center;margin:0;border:0;border-radius:8px;background:#D8E66D;color:#17363B;min-height:36px;padding:7px 8px;}
+.new-bay-status{align-self:center;color:#61736F;font-size:11px;}
 .management-section h3{font-size:22px;}
 .platform-section{border-color:#B9D8C7;background:#EEF7F1;}
 .modal-overlay{background:rgba(18,52,58,.52);}
@@ -393,8 +402,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .manage-service .manage-control:first-child{grid-column:auto;}
   .manage-service .check{grid-column:auto;}
   .manage-service .mini-btn{grid-column:auto;min-height:34px;padding:6px 4px;font-size:9.5px;}
-  .manage-bay{grid-template-columns:1fr 110px;}
-  .manage-bay input:first-child{grid-column:1/-1;}
+  .manage-bay-head,.manage-bay{grid-template-columns:minmax(82px,1fr) 78px 36px 44px;gap:5px;}
+  .manage-bay-head{margin-left:4px;margin-right:4px;}
+  .manage-bay{padding:7px;}
+  .manage-bay input,.manage-bay select{padding:8px 6px;font-size:11px;}
+  .manage-bay .manage-control:first-child{grid-column:auto;}
+  .manage-bay .check{grid-column:auto;}
+  .manage-bay .mini-btn{grid-column:auto;min-height:34px;padding:6px 4px;font-size:9.5px;}
   .manage-grid .mini-btn{margin:0;}
   .btn.compact{width:100%;}
   .modal-card{padding:18px;}
