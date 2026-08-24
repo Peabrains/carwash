@@ -37,6 +37,7 @@ let boardRealtimeCleanup = null;
 // ── Shell ────────────────────────────────────────────────────────────
 function shell(navActive, innerHTML) {
   const isOwner = ['owner', 'platform_owner'].includes(state.staff?.role);
+  const canEditRules = ['owner', 'platform_owner', 'manager'].includes(state.staff?.role);
   const canManage = ['owner', 'platform_owner', 'manager'].includes(state.staff?.role);
   const moreActive = ['overview', 'analytics', 'settings'].includes(navActive);
   const tenant = api.getActiveTenant();
@@ -59,7 +60,7 @@ function shell(navActive, innerHTML) {
         <button type="button" class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</button>
         <button type="button" class="item ${navActive==='history'?'active':''}" data-nav="#/staff/history">Bookings</button>
         ${canManage ? `<button type="button" class="item ${navActive==='organization'?'active':''}" data-nav="#/staff/organization">Manage</button>` : ''}
-        <div class="nav-more-wrap"><button type="button" class="item ${moreActive?'active':''}" data-menu-toggle aria-expanded="false" aria-controls="navMenu">More <span aria-hidden="true">☰</span></button><div class="nav-menu" id="navMenu" hidden>${isOwner ? `<div class="nav-menu-label">Insights</div><button type="button" data-nav="#/staff/overview">Overview</button><button type="button" data-nav="#/staff/analytics">Analytics</button><div class="nav-menu-divider"></div><button type="button" data-nav="#/staff/settings">Settings</button>` : ''}<button type="button" data-signout="1">Sign out</button></div></div>
+        <div class="nav-more-wrap"><button type="button" class="item ${moreActive?'active':''}" data-menu-toggle aria-expanded="false" aria-controls="navMenu">More <span aria-hidden="true">☰</span></button><div class="nav-menu" id="navMenu" hidden>${isOwner ? `<div class="nav-menu-label">Insights</div><button type="button" data-nav="#/staff/overview">Overview</button><button type="button" data-nav="#/staff/analytics">Analytics</button><div class="nav-menu-divider"></div>` : ''}${canEditRules ? '<button type="button" data-nav="#/staff/settings">Settings</button>' : ''}<button type="button" data-signout="1">Sign out</button></div></div>
       </div>` : ''}
     </div>`;
 }
@@ -691,7 +692,7 @@ async function pageStaffSettings() {
   const myGen = ++renderGen;
   const staff = await requireStaff(myGen);
   if (!staff) return;
-  if (!['owner', 'platform_owner'].includes(staff.role)) {
+  if (!['owner', 'platform_owner', 'manager'].includes(staff.role)) {
     app.innerHTML = shell('settings', `<div class="eyebrow">Configuration</div><h2>Owner only</h2><p class="lead">Ask the owner to change booking settings.</p>`);
     wireNav();
     return;
