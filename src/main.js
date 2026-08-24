@@ -53,6 +53,7 @@ function shell(navActive, innerHTML) {
       <div class="screen">${innerHTML}</div>
       ${navActive ? `
       <div class="navbar">
+        ${['owner', 'platform_owner'].includes(state.staff?.role) ? `<button type="button" class="item ${navActive==='overview'?'active':''}" data-nav="#/staff/overview">Overview</button>` : ''}
         <button type="button" class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</button>
         <button type="button" class="item ${navActive==='settings'?'active':''}" data-nav="#/staff/settings">Settings</button>
         <button type="button" class="item ${navActive==='organization'?'active':''}" data-nav="#/staff/organization">Manage</button>
@@ -592,6 +593,40 @@ async function pageStaffHistory() {
     document.getElementById('retryHistory').onclick = pageStaffHistory;
   }
 }
+async function pageStaffOverview() {
+  const myGen = ++renderGen;
+  const staff = await requireStaff(myGen);
+  if (!staff) return;
+  if (!['owner', 'platform_owner'].includes(staff.role)) {
+    app.innerHTML = shell('overview', `<div class="eyebrow">Owner view</div><h2>Owner access only</h2><p class="lead">This overview is for provider owners and platform operators.</p>`);
+    wireNav();
+    return;
+  }
+  try {
+    const [history, bays, closures] = await Promise.all([api.getBookingHistory(), api.getActiveBays({ includeInactive: true }), api.getBayClosuresForDate(localDateISO(new Date()))]);
+    if (myGen !== renderGen) return;
+    const today = localDateISO(new Date());
+    const todayAppointments = history.filter(item => item.scheduled_date === today && item.status !== 'cancelled');
+    const upcoming = history.filter(item => item.status !== 'cancelled' && !item.archived_at && new Date(item.scheduled_at) >= new Date()).sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+    const attention = history.filter(item => item.needs_attention && !item.archived_at);
+    const completed = todayAppointments.filter(item => item.status === 'completed').length;
+    const cancelled = history.filter(item => item.status === 'cancelled').length;
+    const bookedValue = todayAppointments.reduce((sum, item) => sum + Number(item.price_myr || 0), 0);
+    const bayUsage = bays.map(bay => ({ bay, count: todayAppointments.filter(item => item.bay_id === bay.id).length })).sort((a, b) => b.count - a.count);
+    const attentionMarkup = attention.length ? attention.slice(0, 5).map(item => `<div class="overview-attention-row"><div><strong>${h(item.reference || 'Booking')}</strong><span>${h(item.services?.name || 'Wash')} · ${h(item.scheduled_date || '')} ${h(fmtTime(new Date(item.scheduled_at)))}</span></div><a href="#/staff/board">Review</a></div>`).join('') : '<p class="muted">Nothing requires attention right now.</p>';
+    const outageMarkup = closures.length ? closures.map(item => `<div class="overview-attention-row outage-row"><div><strong>${h(item.bays?.name || 'Bay')}</strong><span>${h(fmtTime(new Date(item.starts_at)))}–${h(fmtTime(new Date(item.ends_at)))}${item.reason ? ` · ${h(item.reason)}` : ''}</span></div><span class="tag busy">Bay down</span></div>`).join('') : '<p class="muted">No outages active today.</p>';
+    const bayMarkup = bayUsage.length ? bayUsage.map(({ bay, count }) => `<div class="overview-bay-row"><div><strong>${h(bay.name)}</strong><span>${h(bay.status === 'maintenance' ? 'Maintenance' : bay.is_active === false ? 'Inactive' : 'Open')}</span></div><strong>${count} wash${count === 1 ? '' : 'es'}</strong></div>`).join('') : '<p class="muted">No bays configured.</p>';
+    const upcomingMarkup = upcoming.slice(0, 6).map(item => `<div class="overview-booking-row"><div><strong>${h(item.reference || 'Booking')}</strong><span>${h(item.services?.name || 'Wash')} · ${h(item.bays?.name || 'Bay')}</span></div><time>${h(item.scheduled_date || '')} · ${h(fmtTime(new Date(item.scheduled_at)))}</time></div>`).join('') || '<p class="muted">No upcoming bookings.</p>';
+    app.innerHTML = shell('overview', `<header class="overview-head"><div><div class="eyebrow">Owner monitoring</div><h2>How is the wash running?</h2><p class="lead">A quick view of today’s capacity, bookings and exceptions.</p></div><span class="overview-date">${h(today)}</span></header><section class="overview-metrics"><article><span>Today’s bookings</span><strong>${todayAppointments.length}</strong><small>${completed} completed</small></article><article><span>Booked value</span><strong>RM ${bookedValue.toFixed(2)}</strong><small>today’s scheduled washes</small></article><article><span>Needs attention</span><strong class="${attention.length ? 'metric-alert' : ''}">${attention.length}</strong><small>${closures.length} outage${closures.length === 1 ? '' : 's'} today</small></article><article><span>Cancelled total</span><strong>${cancelled}</strong><small>in available history</small></article></section><div class="overview-grid"><section class="overview-panel overview-attention"><div class="section-heading"><div><h3>Things requiring attention</h3><p>Bookings affected by outages or other exceptions.</p></div><span class="section-count">${attention.length}</span></div>${attentionMarkup}</section><section class="overview-panel"><div class="section-heading"><div><h3>Bay usage today</h3><p>Scheduled washes by bay.</p></div><span class="section-count">${bays.filter(item => item.is_active !== false).length} active</span></div>${bayMarkup}</section><section class="overview-panel"><div class="section-heading"><div><h3>Today’s outages</h3><p>Maintenance windows currently affecting capacity.</p></div><span class="section-count">${closures.length}</span></div>${outageMarkup}</section><section class="overview-panel"><div class="section-heading"><div><h3>Upcoming bookings</h3><p>The next appointments on the schedule.</p></div><span class="section-count">${upcoming.length}</span></div>${upcomingMarkup}</section></div>`);
+    wireNav();
+  } catch (error) {
+    if (myGen !== renderGen) return;
+    app.innerHTML = shell('overview', `<div class="eyebrow">Owner monitoring</div><h2>Could not load overview</h2><p class="lead" style="color:#b3261e">${h(error?.message || 'Unknown error')}</p><button class="btn" id="retryOverview">Try again</button>`);
+    wireNav();
+    document.getElementById('retryOverview').onclick = pageStaffOverview;
+  }
+}
+
 async function pageStaffSettings() {
   const myGen = ++renderGen;
   const staff = await requireStaff(myGen);
@@ -899,6 +934,7 @@ const routes = {
   '#/book': pageCustomerBook,
   '#/staff/login': pageStaffLogin,
   '#/staff/board': pageStaffBoard,
+  '#/staff/overview': pageStaffOverview,
   '#/staff/history': pageStaffHistory,
   '#/staff/settings': pageStaffSettings,
   '#/staff/organization': pageStaffOrganization,
