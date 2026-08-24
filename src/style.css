@@ -1,34 +1,34 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,700&display=swap');
 :root{
-  --ink:#0E2430; --ink-soft:#3D5866; --muted:#607176; --paper:#F4F7F6; --paper-muted:#EEF3F2; --panel:#FFFFFF; --line:#DCE4E2;
-  --primary:#1C6E8C; --primary-deep:#124F63; --amber:#E8A33D; --amber-deep:#C9861F; --success:#3C9D6B; --danger:#A61B1B; --danger-soft:#FFF1EF; --info-soft:#F0F7F9; --success-soft:#EEF7F1;
+  --ink:#12343A; --ink-soft:#61736F; --muted:#71817C; --paper:#F4F6F0; --paper-muted:#E6ECE6; --panel:#FCFCF8; --line:#D2DDD5;
+  --primary:#28705E; --primary-deep:#1E584A; --amber:#D8E66D; --amber-deep:#B5C94C; --success:#3C9D6B; --danger:#A52624; --danger-soft:#FFF0EE; --info-soft:#EEF7F1; --success-soft:#EEF7F1;
   --radius:14px; --shadow:0 1px 2px rgba(14,36,48,.06), 0 8px 24px rgba(14,36,48,.08);
 }
 *{box-sizing:border-box;}
-body{margin:0;font-family:'Avenir Next','Segoe UI',ui-sans-serif,-apple-system,BlinkMacSystemFont,sans-serif;background:var(--paper);color:var(--ink);}
-h1,h2,h3{font-family:Georgia,'Iowan Old Style',serif;letter-spacing:-0.01em;margin:0;}
+body{margin:0;font-family:'DM Sans','Avenir Next','Segoe UI',ui-sans-serif,-apple-system,BlinkMacSystemFont,sans-serif;background:var(--paper);color:var(--ink);}
+h1,h2,h3{font-family:'Fraunces',Georgia,'Iowan Old Style',serif;letter-spacing:-0.025em;margin:0;}
 a{color:inherit;text-decoration:none;}
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #E8A33D;outline-offset:3px;}
 
 /* Layout widens via media query, not a JS-computed flag — so it actually
    responds to real viewport size instead of a one-time hardcoded guess. */
-.app-shell{max-width:480px;margin:0 auto;min-height:100vh;background:var(--panel);box-shadow:var(--shadow);}
+.app-shell{max-width:480px;margin:0 auto;min-height:100vh;background:#FCFCF8;box-shadow:var(--shadow);}
 .screen{padding:22px 20px 90px;}
 @media (min-width:900px){
   .app-shell{max-width:1080px;}
   .screen{padding:34px 44px 90px;}
 }
 
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line);}
-.brand{display:flex;align-items:center;gap:8px;font-family:Georgia,serif;font-weight:600;font-size:17px;}
-.topbar-link{font-size:12px;font-weight:700;color:var(--primary);text-decoration:underline;text-underline-offset:3px;}
-.drop{width:18px;height:18px;flex-shrink:0;border-radius:60% 60% 60% 0/60% 60% 40% 40%;background:linear-gradient(160deg,var(--primary),var(--primary-deep));transform:rotate(45deg);}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:#12343A;color:#F7F8EF;border-bottom:0;}
+.brand{display:flex;align-items:center;gap:8px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:17px;color:#F7F8EF;}
+.topbar-link{font-size:12px;font-weight:700;color:#D8E66D;text-decoration:none;text-underline-offset:3px;}
+.drop{width:18px;height:18px;flex-shrink:0;border-radius:60% 60% 60% 0/60% 60% 40% 40%;background:#D8E66D;transform:rotate(45deg);}
 .tenant-picker{display:grid;justify-items:end;gap:2px;min-width:0;max-width:65%;}
-.tenant-picker>span{font-size:10px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.08em;}
-.tenant-picker select{max-width:100%;border:0;background:transparent;color:var(--ink);font:600 13px inherit;text-align:right;}
-.tenant-picker small{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-soft);font-size:9px;}
+.tenant-picker>span{font-size:10px;font-weight:700;color:#B8D9C9;text-transform:uppercase;letter-spacing:.08em;}
+.tenant-picker select{max-width:100%;border:0;background:transparent;color:#F7F8EF;font:600 13px inherit;text-align:right;}
+.tenant-picker small{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#B8C7C2;font-size:9px;}
 
-.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--primary);font-weight:700;margin-bottom:6px;}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#28705E;font-weight:700;margin-bottom:6px;}
 .lead{color:var(--ink-soft);font-size:14px;line-height:1.5;margin-top:8px;}
 
 .landing-screen{padding-top:34px;}
@@ -64,17 +64,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
 .field input{width:100%;border:1px solid var(--line);border-radius:10px;padding:12px 13px;font-size:15px;background:var(--paper);color:var(--ink);font-family:inherit;}
 
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--ink);color:#fff;border:none;border-radius:10px;padding:13px 18px;font-size:14.5px;font-weight:700;cursor:pointer;width:100%;margin-top:22px;font-family:inherit;}
-.btn.amber{background:linear-gradient(160deg,var(--amber),var(--amber-deep));color:#2B1B02;}
-.btn.ghost{background:transparent;color:var(--primary);border:1px solid var(--primary);}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#D8E66D;color:#17363B;border:none;border-radius:10px;padding:13px 18px;font-size:14.5px;font-weight:700;cursor:pointer;width:100%;margin-top:22px;font-family:inherit;}
+.btn.amber{background:#D8E66D;color:#17363B;}
+.btn.ghost{background:transparent;color:#28705E;border:1px solid #B9D8C7;}
 .btn:disabled{opacity:.4;cursor:not-allowed;}
 
 /* Fixed positioning takes this out of flow, so .screen's bottom padding
    (90px) is what actually reserves space for it — always on, never hidden
    by a layout flag, since staff pages always need navigation. */
-.navbar{display:flex;justify-content:space-around;border-top:1px solid var(--line);position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto;background:var(--panel);padding:12px 0;}
+.navbar{display:flex;justify-content:space-around;border-top:1px solid #D2DDD5;position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto;background:#FCFCF8;padding:12px 0;box-shadow:0 -5px 18px rgba(23,54,59,.06);}
 .navbar .item{font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;background:none;border:none;padding:4px 8px;font-family:inherit;-webkit-tap-highlight-color:rgba(28,110,140,.15);}
-.navbar .item.active{color:var(--primary);}
+.navbar .item.active{color:#28705E;}
 
 .date-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;}
 .date-nav button{flex:0 0 auto;border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;background:var(--paper);color:var(--ink);cursor:pointer;font-family:inherit;}
@@ -301,4 +301,60 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .manage-bay{grid-template-columns:1fr 110px;}.manage-bay .check{grid-column:1/2;}
   .manage-form.two-col,.manage-form.three-col{grid-template-columns:1fr;}
   .manage-form .span-two{grid-column:auto;}
+}
+
+/* Shared Docket operations theme — keeps staff, owner and modal surfaces
+   visually continuous with the customer booking experience. */
+.screen>h2{font-size:clamp(27px,5vw,38px);line-height:1.05;margin:2px 0 0;}
+.screen>.lead{max-width:62ch;}
+.date-nav{margin:20px 0 10px;}
+.date-nav button{background:#F4F6F0;border-color:#D2DDD5;color:#12343A;}
+.date-nav .current{background:#12343A;color:#F7F8EF;}
+.mini-btn{background:#FCFCF8;border-color:#B9D8C7;color:#28705E;border-radius:999px;}
+.mini-btn:hover{background:#EEF7F1;border-color:#28705E;}
+.cal-wrap{background:#FCFCF8;border-color:#D2DDD5;box-shadow:0 7px 20px rgba(23,54,59,.06);}
+.cal-col-head{background:#12343A;}
+.cal-col-head .tag.busy{background:#D8A52E;color:#4A3504;}
+.attention-panel{box-shadow:0 5px 16px rgba(165,38,36,.08);}
+.history-search input,.catalogue-search{background:#FCFCF8;border-color:#D2DDD5;}
+.history-card{background:#FCFCF8;border-color:#D2DDD5;box-shadow:0 4px 13px rgba(23,54,59,.05);}
+.history-status{padding:4px 8px;border-radius:999px;background:#EEF7F1;color:#28705E;font-weight:700;}
+.settings-block,.management-section{background:#FCFCF8;border-color:#D2DDD5;box-shadow:0 5px 16px rgba(23,54,59,.045);}
+.settings-block input,.settings-block select,.management-section input,.management-section select{border:1px solid #D8E1DA;border-radius:9px;background:#F4F6F0;color:#12343A;font-family:inherit;}
+.manage-grid{background:#F4F6F0;border-color:#D8E1DA;}
+.manage-grid input,.manage-grid select,.manage-form input,.manage-form select{background:#FCFCF8;border-color:#D8E1DA;}
+.management-section h3{font-size:22px;}
+.platform-section{border-color:#B9D8C7;background:#EEF7F1;}
+.modal-overlay{background:rgba(18,52,58,.52);}
+.modal-card{background:#FCFCF8;border:1px solid #D2DDD5;box-shadow:0 18px 48px rgba(18,52,58,.22);}
+.booking-summary{background:#F4F6F0;border-color:#D8E1DA;}
+.btn.secondary{background:#FCFCF8;color:#12343A;border-color:#D2DDD5;}
+.btn.secondary:hover{background:#EEF7F1;}
+
+@media (max-width:700px){
+  .screen{padding-left:16px;padding-right:16px;}
+  .topbar{padding:14px 16px;}
+  .tenant-picker{max-width:58%;}
+  .tenant-picker select{font-size:11px;}
+  .date-nav{gap:6px;}
+  .date-nav button{padding:9px 9px;font-size:11px;}
+  .date-nav .current{font-size:12px;}
+  .attention-item{align-items:stretch;flex-direction:column;gap:8px;}
+  .attention-actions{display:grid;grid-template-columns:repeat(3,1fr);}
+  .attention-actions button{width:100%;}
+  .history-card-head{align-items:flex-start;flex-direction:column;}
+  .history-event{display:grid;gap:2px;}
+  .history-event time{min-width:0;}
+  .settings-row{align-items:flex-start;}
+  .settings-row>input,.settings-row>select{width:100%!important;}
+  .settings-row .mini-btn{margin-left:auto;}
+  .outage-datetime{grid-template-columns:1fr;}
+  .management-section{padding:14px;}
+  .manage-service,.manage-bay{grid-template-columns:1fr 1fr;}
+  .manage-service input:first-child,.manage-bay input:first-child{grid-column:1/-1;}
+  .manage-service .check,.manage-bay .check{grid-column:auto;}
+  .manage-grid .mini-btn{margin:0;}
+  .btn.compact{width:100%;}
+  .modal-card{padding:18px;}
+  .confirmation-actions{flex-direction:column;}
 }
