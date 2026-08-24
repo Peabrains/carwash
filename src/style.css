@@ -447,6 +447,7 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .management-section .manage-form>.field:first-child{margin-top:0;}
 .profile-section .manage-form{display:grid;gap:14px;}
 .staff-list{max-height:190px;overflow:auto;padding-right:3px;}
+.staff-section>.manage-form{margin-top:18px;}
 .staff-list .settings-row{margin:0;padding:9px 2px;border-bottom:1px solid #E8ECE8;}
 .services-section,.bays-section{min-width:0;}
 .modal-overlay{background:rgba(18,52,58,.52);}
