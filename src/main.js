@@ -617,7 +617,7 @@ async function pageStaffSettings() {
     <h2 style="margin-top:32px">Crew breaks</h2>
     <p class="lead">Staggered per bay, kept outside your peak hours so bays don't all go down at once. Applies every day.</p>
     <div class="settings-block">${breakRows}</div>
-    <div class="settings-row">
+    <div class="settings-row crew-break-form">
       <select id="breakBay">${bayOptions}</select>
       <input id="breakStart" type="time" value="14:30"/>
       <input id="breakDuration" type="number" value="30" style="width:70px" title="minutes"/>

@@ -36,7 +36,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .landing-hero h1{font-size:clamp(34px,7vw,58px);line-height:1.04;margin:10px auto 0;max-width:10ch;}
 .landing-hero>.lead{max-width:48ch;margin:16px auto 0;font-size:16px;}
 .landing-actions{display:grid;gap:10px;max-width:520px;margin:28px auto 0;text-align:left;}
-.landing-action{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;min-height:72px;padding:16px 18px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);font:inherit;cursor:pointer;text-decoration:none;box-shadow:0 1px 2px rgba(14,36,48,.04);}
+.landing-action{display:flex;align-items:center;justify-content:flex-start;gap:16px;width:100%;min-height:72px;padding:16px 18px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);font:inherit;cursor:pointer;text-decoration:none;text-align:left;box-shadow:0 1px 2px rgba(14,36,48,.04);}
+.landing-action>span:first-child{flex:1;min-width:0;}
 .landing-action:hover{border-color:var(--primary);transform:translateY(-1px);}
 .landing-action.primary{background:var(--ink);border-color:var(--ink);color:#fff;}
 .landing-action strong,.landing-action small{display:block;}
@@ -72,7 +73,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 /* Fixed positioning takes this out of flow, so .screen's bottom padding
    (90px) is what actually reserves space for it — always on, never hidden
    by a layout flag, since staff pages always need navigation. */
-.navbar{display:flex;justify-content:space-around;border-top:1px solid #D2DDD5;position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto;background:#FCFCF8;padding:12px 0;box-shadow:0 -5px 18px rgba(23,54,59,.06);}
+.navbar{display:flex;justify-content:space-around;border-top:1px solid #D2DDD5;position:fixed;bottom:0;left:0;right:0;z-index:20;max-width:480px;margin:0 auto;background:#FCFCF8;padding:12px 0;box-shadow:0 -5px 18px rgba(23,54,59,.06);}
 .navbar .item{font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;background:none;border:none;padding:4px 8px;font-family:inherit;-webkit-tap-highlight-color:rgba(28,110,140,.15);}
 .navbar .item.active{color:#28705E;}
 
@@ -315,12 +316,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .cal-wrap{background:#FCFCF8;border-color:#D2DDD5;box-shadow:0 7px 20px rgba(23,54,59,.06);}
 .cal-col-head{background:#12343A;}
 .cal-col-head .tag.busy{background:#D8A52E;color:#4A3504;}
+.cal-col-head .tag{background:#DDF0E5;color:#28705E;}
+.cal-col-head .tag.busy{background:#F3D27B;color:#6B4900;}
 .attention-panel{box-shadow:0 5px 16px rgba(165,38,36,.08);}
 .history-search input,.catalogue-search{background:#FCFCF8;border-color:#D2DDD5;}
 .history-card{background:#FCFCF8;border-color:#D2DDD5;box-shadow:0 4px 13px rgba(23,54,59,.05);}
 .history-status{padding:4px 8px;border-radius:999px;background:#EEF7F1;color:#28705E;font-weight:700;}
 .settings-block,.management-section{background:#FCFCF8;border-color:#D2DDD5;box-shadow:0 5px 16px rgba(23,54,59,.045);}
 .settings-block input,.settings-block select,.management-section input,.management-section select{border:1px solid #D8E1DA;border-radius:9px;background:#F4F6F0;color:#12343A;font-family:inherit;}
+.settings-block input[type="checkbox"],.management-section input[type="checkbox"]{accent-color:#28705E;}
+.crew-break-form input,.crew-break-form select{border:1px solid #D8E1DA;border-radius:9px;background:#F4F6F0;color:#12343A;font:inherit;padding:10px 11px;}
 .manage-grid{background:#F4F6F0;border-color:#D8E1DA;}
 .manage-grid input,.manage-grid select,.manage-form input,.manage-form select{background:#FCFCF8;border-color:#D8E1DA;}
 .management-section h3{font-size:22px;}
@@ -347,6 +352,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .history-event time{min-width:0;}
   .settings-row{align-items:flex-start;}
   .settings-row>input,.settings-row>select{width:100%!important;}
+  .crew-break-form{display:grid;grid-template-columns:minmax(0,1fr) 1fr 76px auto;align-items:center;gap:7px;}
+  .crew-break-form>select,.crew-break-form>input{width:100%!important;min-width:0;}
+  .crew-break-form>select{grid-column:1/-1;}
+  .crew-break-form .mini-btn{margin:0;min-height:40px;}
   .settings-row .mini-btn{margin-left:auto;}
   .outage-datetime{grid-template-columns:1fr;}
   .management-section{padding:14px;}
