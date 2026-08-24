@@ -176,6 +176,15 @@ async function requireStaff(myGen) {
 function fmtTime(d) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
+function fmtDateTime(value) {
+  if (!value) return 'Not recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not recorded';
+  return date.toLocaleString('en-MY', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+function bookingSource(channel) {
+  return ({ web: 'Web', telegram: 'Telegram', whatsapp: 'WhatsApp', staff: 'Staff' })[channel] || (channel ? String(channel) : 'Unknown');
+}
 function fmtDateLabel(dateISO, isToday) {
   const d = new Date(dateISO + 'T00:00:00');
   const label = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
@@ -337,6 +346,12 @@ async function pageStaffBoard(dateISO) {
   const attention = appts.filter(a => a.needs_attention && a.status !== 'cancelled');
   const attentionSection = attention.length ? `<section class="attention-panel"><div class="attention-heading"><span>⚠ Attention required</span><strong>${attention.length}</strong></div><p>These bookings overlap a bay outage and need a staff decision.</p><div class="attention-list">${attention.map(a => `<div class="attention-item"><button class="attention-booking" data-appt="${h(a.id)}" type="button"><strong>${h(a.services?.name || 'Wash')}</strong> · ${h(a.customer_name || a.customer_chat_id || 'Customer')}<small>${h(a.bays?.name || 'Bay')} · ${fmtTime(new Date(a.scheduled_at))}</small></button><span class="attention-actions"><button data-move-attention="${h(a.id)}" type="button">Move</button><button data-clear-attention="${h(a.id)}" type="button">Clear</button><button data-resolve-attention="${h(a.id)}" type="button">Resolve & archive</button></span></div>`).join('')}</div></section>` : '';
 
+  const liveBookings = appts.filter(a => !['cancelled', 'no_show'].includes(a.status));
+  const upcomingCount = liveBookings.filter(a => ['pending', 'confirmed'].includes(a.status)).length;
+  const inProgressCount = liveBookings.filter(a => a.status === 'in_progress').length;
+  const completedCount = liveBookings.filter(a => a.status === 'completed').length;
+  const bookedValue = liveBookings.reduce((sum, a) => sum + Number(a.price_myr || 0), 0);
+
   const heads = bays.map(b => {
     const bookings = byBay[b.id] || [];
     const bayClosures = closuresByBay[b.id] || [];
@@ -390,24 +405,37 @@ async function pageStaffBoard(dateISO) {
   }).join('');
 
   app.innerHTML = shell('board', `
-    <div class="eyebrow">Staff</div>
-    <h2>Bay board</h2>
-    <div class="date-nav">
-      <button data-date="${shiftDate(date, -1)}">&larr; Prev</button>
-      <div class="current">${fmtDateLabel(date, isToday)}</div>
-      <button data-date="${shiftDate(date, 1)}">Next &rarr;</button>
-      <button data-refresh-board type="button">Refresh</button>
-    </div>
-    ${isToday ? '<p class="lead">Tags show real-time walk-in availability. Gray blocks are scheduled crew breaks.</p>' : ''}
-    ${attentionSection}
-    <div class="calendar-toolbar"><div><strong>Bay schedule</strong><span>${bays.length} active bay${bays.length === 1 ? '' : 's'}</span></div>${staff.role === 'owner' ? '<button class="calendar-outage-btn" id="reportBayOutage" type="button">Report outage</button>' : ''}</div>
-    <div class="cal-wrap">
-      <div class="cal-grid" style="grid-template-columns:44px repeat(${bays.length},minmax(140px,1fr))">
-        <div class="cal-gutter-head"></div>
-        ${heads}
-        <div class="cal-gutter" style="height:${totalMin}px">${hourLabels.join('')}</div>
-        ${tracks}
+    <header class="board-page-head">
+      <div><div class="eyebrow">Daily operations</div><h2>Bay board</h2><p class="lead">Bookings, bay capacity and issues for one working day.</p></div>
+      <div class="date-nav">
+        <button data-date="${shiftDate(date, -1)}" aria-label="Previous day">&larr; Prev</button>
+        <div class="current">${fmtDateLabel(date, isToday)}</div>
+        <button data-date="${shiftDate(date, 1)}" aria-label="Next day">Next &rarr;</button>
+        <button data-refresh-board type="button">Refresh</button>
       </div>
+    </header>
+    <section class="board-kpis" aria-label="Daily summary">
+      <div><span>Bookings</span><strong>${liveBookings.length}</strong><small>${upcomingCount} upcoming</small></div>
+      <div><span>In progress</span><strong>${inProgressCount}</strong><small>${completedCount} completed</small></div>
+      <div><span>Outages</span><strong>${closures.length}</strong><small>${attention.length} need attention</small></div>
+      <div><span>Booked value</span><strong>RM ${bookedValue.toFixed(0)}</strong><small>Before refunds</small></div>
+    </section>
+    <div class="board-workspace">
+      <main class="board-calendar-panel">
+        <div class="calendar-toolbar"><div><strong>Bay schedule</strong><span>${bays.length} active bay${bays.length === 1 ? '' : 's'}${isToday ? ' · live availability' : ''}</span></div>${staff.role === 'owner' ? '<button class="calendar-outage-btn" id="reportBayOutage" type="button">Report outage</button>' : ''}</div>
+        <div class="cal-wrap">
+          <div class="cal-grid" style="grid-template-columns:44px repeat(${bays.length},minmax(140px,1fr))">
+            <div class="cal-gutter-head"></div>
+            ${heads}
+            <div class="cal-gutter" style="height:${totalMin}px">${hourLabels.join('')}</div>
+            ${tracks}
+          </div>
+        </div>
+      </main>
+      <aside class="board-side-panel">
+        ${attentionSection || '<section class="all-clear-panel"><span>✓</span><div><strong>Nothing needs attention</strong><small>No bookings currently clash with an outage.</small></div></section>'}
+        <section class="day-summary-panel"><h3>Today at a glance</h3><dl><div><dt>Opening hours</dt><dd>${h(weekend ? settings.weekend_open : settings.weekday_open).slice(0, 5)}–${h(weekend ? settings.weekend_close : settings.weekday_close).slice(0, 5)}</dd></div><div><dt>Active bays</dt><dd>${bays.length}</dd></div><div><dt>Crew breaks</dt><dd>${breaks.length}</dd></div><div><dt>Buffer</dt><dd>${settings.buffer_minutes} min</dd></div></dl></section>
+      </aside>
     </div>
   `);
   document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => pageStaffBoard(el.dataset.date));
@@ -553,7 +581,7 @@ async function pageStaffHistory() {
   try {
     const history = await api.getBookingHistory();
     if (myGen !== renderGen) return;
-    app.innerHTML = shell('history', `<div class="eyebrow">Operations</div><h2>Booking history</h2><p class="lead">Completed, moved, cancelled, resolved and archived bookings remain here for reference.</p><div class="history-search"><input id="historySearch" type="search" placeholder="Search reference, customer, phone, service, bay or notes" aria-label="Search booking history"></div><div class="history-list">${history.length ? history.map(a => { const searchText = [a.reference, a.customer_name, a.customer_phone, a.customer_chat_id, a.vehicle_plate, a.status, a.services?.name, a.bays?.name, ...(a.events || []).flatMap(event => [event.event_type, event.description])].filter(Boolean).join(' '); return `<article class="history-card" data-history-search="${h(searchText.toLowerCase())}"><div class="history-card-head"><strong>${h(a.reference || 'No reference')}</strong><span class="history-status">${h(String(a.status || '').replace('_', ' '))}${a.archived_at ? ' · archived' : ''}</span></div><div class="history-summary"><span>${h(a.services?.name || 'Wash')}</span><span>${h(a.customer_name || a.customer_chat_id || 'Customer')}</span><span>${h(a.customer_phone || '')}</span><span>${h(a.scheduled_date || '')} · ${h(fmtTime(new Date(a.scheduled_at)))}</span><span>${h(a.bays?.name || 'Bay')}</span></div><div class="history-events">${(a.events || []).length ? a.events.map(event => `<div class="history-event"><time>${h(new Date(event.created_at).toLocaleString('en-MY'))}</time><span><strong>${h(String(event.event_type).replace('_', ' '))}</strong> — ${h(event.description || '')}</span></div>`).join('') : '<div class="history-event muted">No recorded events yet.</div>'}</div></article>`; }).join('') : '<p class="lead">No bookings in history yet.</p>'}</div>`);
+    app.innerHTML = shell('history', `<div class="eyebrow">Operations</div><h2>Booking history</h2><p class="lead">Completed, moved, cancelled, resolved and archived bookings remain here for reference.</p><div class="history-search"><input id="historySearch" type="search" placeholder="Search reference, customer, phone, service, bay, source or notes" aria-label="Search booking history"></div><div class="history-list">${history.length ? history.map(a => { const source = bookingSource(a.channel); const searchText = [a.reference, a.customer_name, a.customer_phone, a.customer_chat_id, a.vehicle_plate, a.status, source, a.created_at, a.services?.name, a.bays?.name, ...(a.events || []).flatMap(event => [event.event_type, event.description])].filter(Boolean).join(' '); return `<article class="history-card" data-history-search="${h(searchText.toLowerCase())}"><div class="history-card-head"><strong>${h(a.reference || 'No reference')}</strong><span class="history-status">${h(String(a.status || '').replace('_', ' '))}${a.archived_at ? ' · archived' : ''}</span></div><dl class="history-summary"><div><dt>Service</dt><dd>${h(a.services?.name || 'Wash')}</dd></div><div><dt>Customer</dt><dd>${h(a.customer_name || a.customer_chat_id || 'Customer')}${a.customer_phone ? ` · ${h(a.customer_phone)}` : ''}</dd></div><div><dt>Appointment</dt><dd>${h(a.scheduled_date || '')} · ${h(fmtTime(new Date(a.scheduled_at)))}</dd></div><div><dt>Bay</dt><dd>${h(a.bays?.name || 'Bay')}</dd></div><div><dt>Booked on</dt><dd>${h(fmtDateTime(a.created_at))}</dd></div><div><dt>Source</dt><dd><span class="history-source">${h(source)}</span></dd></div></dl><div class="history-events">${(a.events || []).length ? a.events.map(event => `<div class="history-event"><time>${h(fmtDateTime(event.created_at))}</time><span><strong>${h(String(event.event_type).replace('_', ' '))}</strong> — ${h(event.description || '')}</span></div>`).join('') : '<div class="history-event muted">No later changes recorded.</div>'}</div></article>`; }).join('') : '<p class="lead">No bookings in history yet.</p>'}</div>`);
     const search = document.getElementById('historySearch');
     search?.addEventListener('input', () => { const term = search.value.trim().toLowerCase(); document.querySelectorAll('[data-history-search]').forEach(card => { card.hidden = Boolean(term) && !card.dataset.historySearch.includes(term); }); });
     wireNav();
