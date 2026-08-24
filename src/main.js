@@ -629,8 +629,8 @@ async function pageStaffSettings() {
       <section class="settings-block settings-card">
         <div class="section-heading"><div><h3>Operating hours</h3><p>Availability shown to customers and staff.</p></div><span class="section-icon">02</span></div>
         <div class="hours-grid-head" aria-hidden="true"><span></span><span>Opens</span><span>Closes</span></div>
-        <div class="hours-row"><strong>Weekdays</strong><input id="weekdayOpen" type="time" value="${s.weekday_open.slice(0,5)}"><input id="weekdayClose" type="time" value="${s.weekday_close.slice(0,5)}"></div>
-        <div class="hours-row"><strong>Weekends</strong><input id="weekendOpen" type="time" value="${s.weekend_open.slice(0,5)}"><input id="weekendClose" type="time" value="${s.weekend_close.slice(0,5)}"></div>
+        <div class="hours-row"><strong>Weekdays</strong><label class="hours-control"><span>Opens</span><input id="weekdayOpen" type="time" value="${s.weekday_open.slice(0,5)}"></label><label class="hours-control"><span>Closes</span><input id="weekdayClose" type="time" value="${s.weekday_close.slice(0,5)}"></label></div>
+        <div class="hours-row"><strong>Weekends</strong><label class="hours-control"><span>Opens</span><input id="weekendOpen" type="time" value="${s.weekend_open.slice(0,5)}"></label><label class="hours-control"><span>Closes</span><input id="weekendClose" type="time" value="${s.weekend_close.slice(0,5)}"></label></div>
       </section>
     </div>
 

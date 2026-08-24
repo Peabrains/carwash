@@ -227,9 +227,10 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .new-row{margin-top:10px;border-style:dashed;}
 .check{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-soft);}
 .check input{width:auto;}
-.manage-form{display:grid;gap:0 12px;}
+.manage-form{display:grid;gap:14px 12px;}
 .manage-form.two-col{grid-template-columns:1fr 1fr;}
 .manage-form.three-col{grid-template-columns:1.4fr 1fr .8fr;}
+.manage-form>.field{margin-top:0;min-width:0;}
 .manage-form .span-two{grid-column:1/-1;}
 .action-field{display:flex;align-items:end;}
 .btn.compact{width:auto;min-width:150px;margin-top:14px;padding:10px 14px;}
@@ -393,6 +394,8 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .hours-row{padding:9px 0;border-bottom:1px solid #E8ECE8;}
 .hours-row:last-child{border-bottom:0;}
 .hours-row strong{font-size:11px;}
+.hours-control{display:block;min-width:0;}
+.hours-control>span{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 .hours-row input{box-sizing:border-box;width:100%;min-width:0;padding:9px 7px;font:600 12px inherit;}
 .crew-break-card{margin-top:16px;}
 .break-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px;}
@@ -442,7 +445,7 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .management-top-grid .management-section,.management-ops-grid .management-section,.management-admin-grid .management-section{height:100%;margin:0;}
 .management-section .section-heading{margin-bottom:12px;}
 .management-section .manage-form>.field:first-child{margin-top:0;}
-.profile-section .manage-form{display:grid;gap:0;}
+.profile-section .manage-form{display:grid;gap:14px;}
 .staff-list{max-height:190px;overflow:auto;padding-right:3px;}
 .staff-list .settings-row{margin:0;padding:9px 2px;border-bottom:1px solid #E8ECE8;}
 .services-section,.bays-section{min-width:0;}
@@ -472,17 +475,26 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
   .settings-save{width:100%;margin-top:16px;}
   .section-heading h3{font-size:18px;}
   .settings-card{padding:14px;}
-  .hours-grid-head,.hours-row{grid-template-columns:72px minmax(0,1fr) minmax(0,1fr);gap:5px;}
-  .hours-row input{padding:8px 5px;font-size:11px;}
+  .hours-grid-head{display:none;}
+  .hours-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 8px;padding:12px 0;}
+  .hours-row>strong{grid-column:1/-1;font-size:12px;}
+  .hours-control{display:grid;gap:4px;}
+  .hours-control>span{position:static;width:auto;height:auto;margin:0;overflow:visible;clip:auto;white-space:normal;color:#71817C;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
+  .hours-row input{height:42px;padding:8px;font-size:12px;}
   .break-list{grid-template-columns:1fr;}
   .manage-summary{justify-content:flex-start;margin-top:14px;}
   .settings-row{align-items:flex-start;}
   .settings-row>input,.settings-row>select{width:100%!important;}
-  .crew-break-form{grid-template-columns:minmax(76px,1fr) 94px 58px 48px;gap:5px;}
+  .crew-break-form{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"bay start" "duration action";gap:10px;margin-top:14px;padding-top:14px;}
+  .crew-break-form>.crew-control:nth-child(1){grid-area:bay;}
+  .crew-break-form>.crew-control:nth-child(2){grid-area:start;}
+  .crew-break-form>.crew-control:nth-child(3){grid-area:duration;}
+  .crew-break-form>.mini-btn{grid-area:action;}
   .crew-break-form>.crew-control{min-width:0;}
   .crew-break-form>.crew-control>input,.crew-break-form>.crew-control>select{width:100%!important;min-width:0;}
-  .crew-break-form input,.crew-break-form select{padding:9px 7px;font-size:12px;}
-  .crew-break-form .mini-btn{margin:0;min-height:38px;padding:8px 5px;font-size:10px;}
+  .crew-break-form input,.crew-break-form select,.crew-break-form .compact-number{height:42px;padding:9px 10px;font-size:12px;}
+  .crew-break-form .compact-number{padding:0;}
+  .crew-break-form .mini-btn{margin:0;min-height:42px;padding:9px 10px;font-size:11px;white-space:nowrap;}
   .settings-row .mini-btn{margin-left:auto;}
   .outage-datetime{grid-template-columns:minmax(0,1.35fr) minmax(96px,.65fr);gap:6px;}
   .outage-datetime input,.outage-datetime select{padding-left:8px;padding-right:8px;font-size:12px;}
