@@ -272,8 +272,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .manage-action-btn.cancel-action-btn{background:#C75543;color:#fff;}
 .manage-action-btn.cancel-confirm{background:#A52624;color:#fff;}
 .availability-search>*{min-width:0;}
-.availability-search .field,.availability-search input,.availability-search select{box-sizing:border-box;max-width:100%;min-width:0;width:100%;}
-.availability-search input[type="date"],.availability-search input[type="time"]{display:block;overflow:hidden;}
+.availability-search .field{box-sizing:border-box;contain:inline-size;max-width:100%;min-width:0;overflow:hidden;width:100%;}
+.availability-search input,.availability-search select{box-sizing:border-box;inline-size:100%;max-inline-size:100%;max-width:100%;min-inline-size:0;min-width:0;width:100%;}
+.availability-search input[type="date"],.availability-search input[type="time"]{-webkit-appearance:none;appearance:none;display:block;overflow:hidden;}
+.availability-search input[type="date"]::-webkit-date-and-time-value,.availability-search input[type="time"]::-webkit-date-and-time-value{min-width:0;text-align:center;}
 .customer-book-screen,.customer-book-shell{min-width:0;overflow-x:clip;}
 
 @media (max-width:700px){
