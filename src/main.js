@@ -400,6 +400,7 @@ async function pageStaffBoard(dateISO) {
     </div>
     ${isToday ? '<p class="lead">Tags show real-time walk-in availability. Gray blocks are scheduled crew breaks.</p>' : ''}
     ${attentionSection}
+    ${staff.role === 'owner' ? `<section class="bay-actions"><div class="bay-actions-head"><strong>Bay status</strong><span>Report maintenance windows before they affect bookings.</span></div><div class="bay-action-list">${bays.map(b => b.status === 'maintenance' ? `<button class="mini-btn" data-bring-up="${b.id}">Bring ${b.name} back online</button>` : `<button class="mini-btn" data-report="${b.id}">Report ${b.name} down</button>`).join('')}</div></section>` : ''}
     <div class="cal-wrap">
       <div class="cal-grid" style="grid-template-columns:44px repeat(${bays.length},minmax(140px,1fr))">
         <div class="cal-gutter-head"></div>
@@ -408,7 +409,6 @@ async function pageStaffBoard(dateISO) {
         ${tracks}
       </div>
     </div>
-    ${staff.role === 'owner' ? `<div class="settings-row" style="margin-top:14px">${bays.map(b => b.status === 'maintenance' ? `<button class="mini-btn" data-bring-up="${b.id}">Bring ${b.name} back online</button>` : `<button class="mini-btn" data-report="${b.id}">Report ${b.name} down</button>`).join('')}</div>` : ''}
   `);
   document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => pageStaffBoard(el.dataset.date));
   document.querySelector('[data-refresh-board]')?.addEventListener('click', () => pageStaffBoard(date));
@@ -618,9 +618,9 @@ async function pageStaffSettings() {
     <p class="lead">Staggered per bay, kept outside your peak hours so bays don't all go down at once. Applies every day.</p>
     <div class="settings-block">${breakRows}</div>
     <div class="settings-row crew-break-form">
-      <select id="breakBay">${bayOptions}</select>
-      <input id="breakStart" type="time" value="14:30"/>
-      <input id="breakDuration" type="number" value="30" style="width:70px" title="minutes"/>
+      <label class="crew-control"><span>Bay</span><select id="breakBay">${bayOptions}</select></label>
+      <label class="crew-control"><span>Start time</span><input id="breakStart" type="time" value="14:30"/></label>
+      <label class="crew-control"><span>Minutes</span><input id="breakDuration" type="number" value="30" title="minutes"/></label>
       <button class="mini-btn" id="addBreak">Add</button>
     </div>
   `);
@@ -677,9 +677,9 @@ async function pageStaffOrganization() {
   if (myGen !== renderGen) return;
 
   const serviceRows = services.map(service => `<div class="manage-grid manage-service" data-service-row="${h(service.id)}">
-    <input data-field="name" value="${h(service.name)}" aria-label="Service name">
-    <input data-field="duration" type="number" min="1" value="${Number(service.duration_minutes)}" aria-label="Duration in minutes">
-    <input data-field="price" type="number" min="0" step="0.01" value="${Number(service.price_myr)}" aria-label="Price in ringgit">
+    <label class="manage-control"><span>Service name</span><input data-field="name" value="${h(service.name)}" aria-label="Service name"></label>
+    <label class="manage-control"><span>Duration (min)</span><input data-field="duration" type="number" min="1" value="${Number(service.duration_minutes)}" aria-label="Duration in minutes"></label>
+    <label class="manage-control"><span>Price (RM)</span><input data-field="price" type="number" min="0" step="0.01" value="${Number(service.price_myr)}" aria-label="Price in ringgit"></label>
     <label class="check"><input data-field="active" type="checkbox" ${service.is_active !== false ? 'checked' : ''}> Active</label>
     <button class="mini-btn" data-save-service="${h(service.id)}">Save</button>
   </div>`).join('') || '<p class="lead">No services configured for this location.</p>';
@@ -716,9 +716,9 @@ async function pageStaffOrganization() {
       <p class="lead">Name, wash duration, price (RM), and whether customers can book it.</p>
       <div class="manage-list">${serviceRows}</div>
       <div class="manage-grid manage-service new-row">
-        <input id="newServiceName" placeholder="New service">
-        <input id="newServiceDuration" type="number" min="1" value="30" aria-label="Duration">
-        <input id="newServicePrice" type="number" min="0" step="0.01" value="0" aria-label="Price">
+        <label class="manage-control"><span>Service name</span><input id="newServiceName" placeholder="New service"></label>
+        <label class="manage-control"><span>Duration (min)</span><input id="newServiceDuration" type="number" min="1" value="30" aria-label="Duration"></label>
+        <label class="manage-control"><span>Price (RM)</span><input id="newServicePrice" type="number" min="0" step="0.01" value="0" aria-label="Price"></label>
         <span></span><button class="mini-btn" id="addService">Add</button>
       </div>
     </section>

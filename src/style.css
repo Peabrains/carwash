@@ -73,9 +73,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 /* Fixed positioning takes this out of flow, so .screen's bottom padding
    (90px) is what actually reserves space for it — always on, never hidden
    by a layout flag, since staff pages always need navigation. */
-.navbar{display:flex;justify-content:space-around;border-top:1px solid #D2DDD5;position:fixed;bottom:0;left:0;right:0;z-index:20;max-width:480px;margin:0 auto;background:#FCFCF8;padding:12px 0;box-shadow:0 -5px 18px rgba(23,54,59,.06);}
-.navbar .item{font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;background:none;border:none;padding:4px 8px;font-family:inherit;-webkit-tap-highlight-color:rgba(28,110,140,.15);}
-.navbar .item.active{color:#28705E;}
+.navbar{display:flex;justify-content:space-around;position:fixed;bottom:12px;left:12px;right:12px;z-index:20;max-width:456px;margin:0 auto;padding:7px;border:1px solid rgba(255,255,255,.72);border-radius:22px;background:rgba(252,252,248,.78);box-shadow:0 10px 28px rgba(18,52,58,.18),inset 0 1px 0 rgba(255,255,255,.8);backdrop-filter:blur(18px) saturate(1.25);-webkit-backdrop-filter:blur(18px) saturate(1.25);}
+.navbar .item{flex:1;min-width:0;font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;background:transparent;border:0;border-radius:16px;padding:9px 5px;font-family:inherit;transition:background-color .2s ease,color .2s ease,transform .2s ease,box-shadow .2s ease;-webkit-tap-highlight-color:rgba(40,112,94,.15);}
+.navbar .item:hover{background:rgba(216,230,109,.35);color:#12343A;}
+.navbar .item.active{color:#17363B;background:#D8E66D;transform:translateY(-3px);box-shadow:0 5px 12px rgba(181,201,76,.35);}
 
 .date-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;}
 .date-nav button{flex:0 0 auto;border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;background:var(--paper);color:var(--ink);cursor:pointer;font-family:inherit;}
@@ -318,6 +319,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .cal-col-head .tag.busy{background:#D8A52E;color:#4A3504;}
 .cal-col-head .tag{background:#DDF0E5;color:#28705E;}
 .cal-col-head .tag.busy{background:#F3D27B;color:#6B4900;}
+.bay-actions{margin:16px 0;border:1px solid #D2DDD5;border-radius:14px;padding:12px 14px;background:#FCFCF8;box-shadow:0 5px 16px rgba(23,54,59,.045);}
+.bay-actions-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:9px;}
+.bay-actions-head strong{font-family:'Fraunces',Georgia,serif;font-size:18px;}
+.bay-actions-head span{color:var(--ink-soft);font-size:11px;text-align:right;}
+.bay-action-list{display:flex;flex-wrap:wrap;gap:7px;}
+.bay-action-list .mini-btn{margin:0;}
 .attention-panel{box-shadow:0 5px 16px rgba(165,38,36,.08);}
 .history-search input,.catalogue-search{background:#FCFCF8;border-color:#D2DDD5;}
 .history-card{background:#FCFCF8;border-color:#D2DDD5;box-shadow:0 4px 13px rgba(23,54,59,.05);}
@@ -328,6 +335,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .crew-break-form input,.crew-break-form select{border:1px solid #D8E1DA;border-radius:9px;background:#F4F6F0;color:#12343A;font:inherit;padding:10px 11px;}
 .manage-grid{background:#F4F6F0;border-color:#D8E1DA;}
 .manage-grid input,.manage-grid select,.manage-form input,.manage-form select{background:#FCFCF8;border-color:#D8E1DA;}
+.manage-control{display:grid;gap:4px;min-width:0;}
+.manage-control>span,.crew-control>span{font-size:10px;font-weight:700;letter-spacing:.04em;color:#71817C;}
+.manage-control input{min-width:0;}
+.crew-control{display:grid;gap:4px;min-width:0;}
 .management-section h3{font-size:22px;}
 .platform-section{border-color:#B9D8C7;background:#EEF7F1;}
 .modal-overlay{background:rgba(18,52,58,.52);}
@@ -347,20 +358,26 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .attention-item{align-items:stretch;flex-direction:column;gap:8px;}
   .attention-actions{display:grid;grid-template-columns:repeat(3,1fr);}
   .attention-actions button{width:100%;}
+  .bay-actions-head{align-items:flex-start;flex-direction:column;gap:3px;}
+  .bay-actions-head span{text-align:left;}
+  .bay-action-list{display:grid;grid-template-columns:1fr 1fr;}
+  .bay-action-list .mini-btn{width:100%;}
   .history-card-head{align-items:flex-start;flex-direction:column;}
   .history-event{display:grid;gap:2px;}
   .history-event time{min-width:0;}
   .settings-row{align-items:flex-start;}
   .settings-row>input,.settings-row>select{width:100%!important;}
-  .crew-break-form{display:grid;grid-template-columns:minmax(0,1fr) 1fr 76px auto;align-items:center;gap:7px;}
-  .crew-break-form>select,.crew-break-form>input{width:100%!important;min-width:0;}
-  .crew-break-form>select{grid-column:1/-1;}
+  .crew-break-form{display:grid;grid-template-columns:minmax(0,1fr) 76px auto;align-items:end;gap:7px;}
+  .crew-break-form>.crew-control:first-child{grid-column:1/-1;}
+  .crew-break-form>.crew-control{min-width:0;}
+  .crew-break-form>.crew-control>input,.crew-break-form>.crew-control>select{width:100%!important;min-width:0;}
   .crew-break-form .mini-btn{margin:0;min-height:40px;}
   .settings-row .mini-btn{margin-left:auto;}
   .outage-datetime{grid-template-columns:1fr;}
   .management-section{padding:14px;}
   .manage-service,.manage-bay{grid-template-columns:1fr 1fr;}
-  .manage-service input:first-child,.manage-bay input:first-child{grid-column:1/-1;}
+  .manage-service .manage-control:first-child,.manage-bay input:first-child{grid-column:1/-1;}
+  .manage-service .manage-control:nth-child(2),.manage-service .manage-control:nth-child(3){min-width:0;}
   .manage-service .check,.manage-bay .check{grid-column:auto;}
   .manage-grid .mini-btn{margin:0;}
   .btn.compact{width:100%;}
