@@ -265,6 +265,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .customer-manage h3{font-size:20px;margin:0;}
 .customer-manage .lead{max-width:54ch;}
 .customer-manage .field input{background:#FCFCF8;}
+.customer-manage .field select{width:100%;box-sizing:border-box;border:1px solid #D8E1DA;border-radius:9px;padding:11px 12px;background:#FCFCF8;color:var(--ink);font:inherit;}
 .find-booking-btn{background:#D8E66D;color:#17363B;}
 .manage-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .manage-action-btn{margin-top:16px;background:#17363B;color:#fff;min-height:44px;}
@@ -290,8 +291,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 @media (max-width:700px){
   .landing-topbar{padding:14px 16px;}.landing-topbar .topbar-link{font-size:11px;}.landing-screen{padding:20px 16px 44px;}.landing-hero{padding:24px 0 18px;}.landing-hero h1{font-size:42px;}.landing-hero>.lead{font-size:14px;}.landing-steps{grid-template-columns:1fr;}.landing-steps>div{grid-template-columns:28px 1fr;align-items:center;gap:8px;padding:12px 14px;}.landing-steps small{grid-column:2; margin-top:-4px;}.landing-secondary{display:block;padding:20px 0 0;}.landing-manage{margin-top:14px;}
   .customer-book-screen{padding:22px 16px 70px;}.customer-book-heading{align-items:flex-start;display:block;margin-bottom:22px;}.customer-book-heading h1{font-size:38px;}.booking-status{display:inline-block;margin-top:12px;}.results-head{align-items:flex-start;display:block;}.results-date{display:block;margin-top:7px;}
-  .availability-search{grid-template-columns:1fr;}
-  .availability-search .btn{grid-column:auto;}
   .availability-service{align-items:flex-start;flex-direction:column;}
   .catalogue-browse>div:first-child{display:block;}.booking-sheet{padding:24px 18px;}.booking-sheet h3{font-size:23px;}
   .availability-slots{justify-content:flex-start;}
