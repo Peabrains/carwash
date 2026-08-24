@@ -265,8 +265,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .customer-manage h3{font-size:20px;margin:0;}
 .customer-manage .lead{max-width:54ch;}
 .customer-manage .field input{background:#FCFCF8;}
+.find-booking-btn{background:#D8E66D;color:#17363B;}
+.manage-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.manage-action-btn{margin-top:16px;background:#17363B;color:#fff;min-height:44px;}
+.manage-action-btn.cancel-action-btn{background:#C75543;color:#fff;}
+.manage-action-btn.cancel-confirm{background:#A52624;color:#fff;}
 .availability-search>*{min-width:0;}
-.availability-search input,.availability-search select{box-sizing:border-box;max-width:100%;min-width:0;}
+.availability-search .field,.availability-search input,.availability-search select{box-sizing:border-box;max-width:100%;min-width:0;width:100%;}
+.availability-search input[type="date"],.availability-search input[type="time"]{display:block;overflow:hidden;}
 .customer-book-screen,.customer-book-shell{min-width:0;overflow-x:clip;}
 
 @media (max-width:700px){
@@ -277,6 +283,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .availability-search .availability-mode,.availability-search .provider-filter-field,.availability-search .btn{grid-column:1/-1;}
   .availability-search .field{min-width:0;}
   .availability-search .field input,.availability-search .field select{min-height:44px;padding:9px 10px;font-size:13px;}
+  .manage-actions{grid-template-columns:1fr;gap:0;}
   .availability-search .btn{margin-top:10px;}
   .provider-card{padding:12px;}
 }
