@@ -115,11 +115,25 @@ async function pageStaffLogin() {
 // screen, since redirecting back to login there would just loop forever.
 // Takes the caller's render token and checks it after every await, so a
 // stale call (superseded by a newer click) never renders over fresher UI.
+function withTimeout(promise, milliseconds, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), milliseconds); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function requireStaff(myGen) {
   if (myGen === renderGen) {
     app.innerHTML = shell('', '<div class="eyebrow">Staff</div><h2>Loading staff access…</h2><p class="lead">Checking your account permissions.</p>');
   }
-  const user = await api.getAuthUser();
+  let user;
+  try {
+    user = await withTimeout(api.getAuthUser(), 12000, 'Supabase authentication check timed out. Please retry or reload the page.');
+  } catch (error) {
+    if (myGen !== renderGen) return null;
+    app.innerHTML = shell('', `<div class="eyebrow">Sign-in problem</div><h2>We couldn't check your sign-in</h2><p class="lead">The authentication service did not respond in time. Your account may still be signed in; retry once, then reload if needed.</p><p class="lead" style="color:#b3261e">${h(error?.message || 'Authentication check failed')}</p><button class="btn" id="retryStaff">Try again</button>`);
+    document.getElementById('retryStaff').onclick = () => router();
+    return null;
+  }
   if (myGen !== renderGen) return null;
   if (!user) {
     location.hash = '#/staff/login';
@@ -128,7 +142,7 @@ async function requireStaff(myGen) {
 
   let staff;
   try {
-    staff = await api.getCurrentStaff();
+    staff = await withTimeout(api.getCurrentStaff(), 12000, 'Supabase staff permission check timed out. Please retry or reload the page.');
   } catch (error) {
     if (myGen !== renderGen) return null;
     app.innerHTML = shell('', `
