@@ -710,7 +710,7 @@ async function pageStaffOrganization() {
     <label class="check bay-active"><input data-field="active" type="checkbox" ${bay.is_active !== false ? 'checked' : ''}><span>Active</span></label>
     <button class="mini-btn" data-save-bay="${h(bay.id)}">Save</button>
   </div>`).join('') || '<p class="lead">No bays configured for this location.</p>';
-  const staffRows = staffMembers.map(member => `<div class="settings-row"><div><strong>${h(member.name || member.email || member.id)}</strong><div class="muted">${h(member.email || member.id)} · ${h(member.role)}</div></div><span class="tag ${member.is_active === false ? 'busy' : ''}">${member.is_active === false ? 'Inactive' : 'Active'}</span></div>`).join('') || '<p class="lead">No staff assigned to this location.</p>';
+  const staffRows = staffMembers.map(member => `<div class="settings-row"><div><strong>${h(member.name || member.email || member.id)}</strong><div class="muted">${h(member.email || member.id)} · ${h(member.role)}</div></div><span class="tag ${member.pending ? 'pending' : member.is_active === false ? 'busy' : ''}">${member.pending ? 'Invitation pending' : member.is_active === false ? 'Inactive' : 'Active'}</span></div>`).join('') || '<p class="lead">No staff assigned to this location.</p>';
   const providerProfileSection = ['platform_owner', 'owner'].includes(staff.role)
     ? `<section class="management-section profile-section"><div class="section-heading"><div><h3>Provider profile</h3><p>Public information shown in the customer catalogue.</p></div><span class="section-icon">01</span></div><div class="manage-form"><div class="field"><label>Provider name</label><input id="providerName" value="${h(provider?.name || '')}"></div><div class="field"><label>Description</label><input id="providerDescription" value="${h(provider?.description || '')}" placeholder="What makes this car wash different?"></div></div><button class="btn compact" id="saveProviderProfile">Save profile</button></section>`
     : `<section class="management-section profile-section"><div class="section-heading"><div><h3>Provider profile</h3><p>Public information shown in the customer catalogue.</p></div></div><p class="lead">${h(provider?.name || tenant.providerId)}${provider?.description ? ` — ${h(provider.description)}` : ''}</p></section>`;
@@ -752,9 +752,9 @@ async function pageStaffOrganization() {
 
     <div class="management-admin-grid">
     ${staff.role !== 'manager' ? `<section class="management-section staff-section">
-      <div class="section-heading"><div><h3>Staff access</h3><p>Assign roles after the staff member has signed in once.</p></div><span class="section-count">${staffMembers.length} people</span></div><div class="manage-list staff-list">${staffRows}</div>
+      <div class="section-heading"><div><h3>Staff access</h3><p>Invite a staff member by Google email. They can sign in after you save the invitation.</p></div><span class="section-count">${staffMembers.length} people</span></div><div class="manage-list staff-list">${staffRows}</div>
       <div class="manage-form three-col">
-        <div class="field"><label>Email</label><input id="staffEmail" type="email" placeholder="staff@example.com"></div>
+        <div class="field"><label>Google email</label><input id="staffEmail" type="email" placeholder="staff@example.com"></div>
         <div class="field"><label>Name</label><input id="staffName" placeholder="Staff name"></div>
         <div class="field"><label>Role</label><select id="staffRole"><option value="worker">Worker</option><option value="manager">Manager</option><option value="owner">Owner</option></select></div>
         </div><p id="staffMessage" class="lead" role="status"></p><button class="btn compact" id="addStaff">Add or update staff</button>
@@ -801,7 +801,7 @@ async function pageStaffOrganization() {
   document.getElementById('addStaff')?.addEventListener('click', async event => {
     const email = document.getElementById('staffEmail').value.trim(); if (!email) return alert('Enter the staff email used for Google sign-in.');
     const button = event.currentTarget; const message = document.getElementById('staffMessage'); button.disabled = true; message.textContent = 'Saving staff access…';
-    try { await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); message.textContent = 'Staff access saved.'; refresh(); } catch (error) { message.textContent = `Could not save staff access: ${error?.message || 'Unknown error'}`; } finally { button.disabled = false; }
+    try { const result = await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); message.textContent = result?.status === 'invited' ? 'Invitation saved. Staff can now sign in with Google.' : 'Staff access saved.'; refresh(); } catch (error) { message.textContent = `Could not save staff access: ${error?.message || 'Unknown error'}`; } finally { button.disabled = false; }
   });
   document.getElementById('addProvider')?.addEventListener('click', async () => {
     try { const name = document.getElementById('newProviderName').value.trim(); if (!name) return alert('Enter a provider name.'); await api.createProvider({ name }); state.tenants = await api.getAccessibleTenants(staff); refresh(); } catch (error) { showManageError(error); }
