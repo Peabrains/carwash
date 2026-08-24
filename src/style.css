@@ -225,12 +225,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 
 /* Customer booking surface — Docket marketplace direction */
 .customer-book-screen{background:#F4F6F0;}
-.customer-book-screen .topbar{background:#12343A;color:#F7F8EF;border-bottom:0;}
-.customer-book-screen .brand{color:#F7F8EF;font-family:'DM Sans',sans-serif;font-weight:700;}
-.customer-book-screen .drop{background:#D8E66D;}
-.customer-book-screen .topbar-link{color:#D8E66D;text-decoration:none;}
+.customer-book-topbar{background:#12343A;color:#F7F8EF;border-bottom:0;}
+.customer-book-topbar .brand{color:#F7F8EF;font-family:'DM Sans',sans-serif;font-weight:700;}
+.customer-book-topbar .drop{background:#D8E66D;}
+.customer-book-topbar .topbar-link{color:#D8E66D;text-decoration:none;}
 .customer-book-heading{max-width:900px;}
 .customer-book-heading h1,.customer-book-screen h2,.customer-book-screen h3,.customer-book-screen h4{font-family:'Fraunces',Georgia,serif;letter-spacing:-.025em;}
+.customer-kicker{font-size:11px;text-transform:uppercase;letter-spacing:.11em;color:#28705E;font-weight:700;margin-bottom:7px;}
 .customer-book-heading h1{font-size:clamp(34px,5vw,48px);}
 .customer-book-heading .lead{color:#61736F;}
 .booking-status{background:#EEF7F1;border-color:#B9D8C7;color:#28705E;}
@@ -265,9 +266,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 
 @media (max-width:700px){
   .customer-book-screen{padding-top:22px;}
-  .customer-book-heading h1{font-size:39px;}
-  .booking-status{font-size:10px;}
-  .availability-search{padding:12px;}
+  .customer-book-heading h1{font-size:38px;max-width:10ch;line-height:1.02;}
+  .customer-book-heading .lead{max-width:31ch;}
+  .availability-search{grid-template-columns:1fr 1fr;padding:12px;}
+  .availability-search .availability-mode,.availability-search .provider-filter-field,.availability-search .btn{grid-column:1/-1;}
+  .availability-search .field input,.availability-search .field select{min-height:44px;padding:9px 10px;font-size:13px;}
   .availability-search .btn{margin-top:10px;}
   .provider-card{padding:12px;}
 }

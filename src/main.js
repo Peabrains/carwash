@@ -823,7 +823,7 @@ function pageCustomerLanding() {
 }
 
 async function pageCustomerBook() {
-  app.innerHTML = `<div class="app-shell"><div class="topbar"><div class="brand"><div class="drop"></div>Docket</div><a class="topbar-link" href="#/">Back to home</a></div><div class="screen customer-book-screen"><div class="customer-book-heading"><div><h1>Book a wash</h1><p class="lead">Choose a time or provider, then pick an available service.</p></div><span class="booking-status">Live availability</span></div><div id="customerBook" class="card">Loading providers…</div></div></div>`;
+  app.innerHTML = `<div class="app-shell customer-book-shell"><div class="topbar customer-book-topbar"><div class="brand"><div class="drop"></div>Docket</div><a class="topbar-link" href="#/">Back to home</a></div><div class="screen customer-book-screen"><div class="customer-book-heading"><div><div class="customer-kicker">Car wash booking</div><h1>Find a wash that fits your day.</h1><p class="lead">Choose a time or provider, then pick an available service.</p></div></div><div id="customerBook" class="card">Loading providers…</div></div></div>`;
   const root = document.getElementById('customerBook');
   try {
     const catalogue = await loadCatalogue();
