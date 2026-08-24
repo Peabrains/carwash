@@ -74,13 +74,21 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 /* Fixed positioning takes this out of flow, so .screen's bottom padding
    (90px) is what actually reserves space for it — always on, never hidden
    by a layout flag, since staff pages always need navigation. */
-.navbar{display:flex;justify-content:space-around;position:fixed;bottom:12px;left:12px;right:12px;z-index:20;isolation:isolate;overflow:hidden;max-width:456px;margin:0 auto;padding:7px;border:1px solid rgba(255,255,255,.9);border-radius:22px;background:linear-gradient(145deg,rgba(222,239,230,.58),rgba(255,255,255,.32));box-shadow:0 16px 36px rgba(18,52,58,.24),inset 0 1px 1px rgba(255,255,255,1),inset 0 -1px 0 rgba(40,112,94,.16);backdrop-filter:blur(30px) saturate(1.7);-webkit-backdrop-filter:blur(30px) saturate(1.7);}
+.navbar{display:flex;justify-content:space-around;position:fixed;bottom:12px;left:12px;right:12px;z-index:20;isolation:isolate;overflow:visible;max-width:456px;margin:0 auto;padding:7px;border:1px solid rgba(255,255,255,.9);border-radius:22px;background:linear-gradient(145deg,rgba(222,239,230,.58),rgba(255,255,255,.32));box-shadow:0 16px 36px rgba(18,52,58,.24),inset 0 1px 1px rgba(255,255,255,1),inset 0 -1px 0 rgba(40,112,94,.16);backdrop-filter:blur(30px) saturate(1.7);-webkit-backdrop-filter:blur(30px) saturate(1.7);}
 .navbar::before{content:'';position:absolute;z-index:-1;inset:0;background:radial-gradient(ellipse at 14% -25%,rgba(255,255,255,1),transparent 44%),linear-gradient(108deg,rgba(255,255,255,.12) 16%,rgba(255,255,255,.54) 48%,rgba(40,112,94,.09) 76%);pointer-events:none;}
 .navbar::after{content:'';position:absolute;left:9%;right:9%;top:1px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.95),transparent);pointer-events:none;}
 .navbar .item{flex:1;min-width:0;font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;background:transparent;border:0;border-radius:16px;padding:9px 5px;font-family:inherit;transition:background-color .2s ease,color .2s ease,transform .2s ease,box-shadow .2s ease;-webkit-tap-highlight-color:rgba(40,112,94,.15);}
 .navbar .item:hover{background:rgba(216,230,109,.35);color:#12343A;}
 .navbar .item.active{color:#17363B;background:linear-gradient(145deg,rgba(229,239,145,.92),rgba(199,218,83,.72));transform:translateY(-3px);box-shadow:0 6px 16px rgba(137,158,52,.34),inset 0 1px 1px rgba(255,255,255,.78);animation:glass-nav-pop .38s cubic-bezier(.2,.85,.25,1.25);}
 .navbar .item:active{transform:scale(.95);}
+.nav-more-wrap{position:relative;flex:1;min-width:0;}
+.nav-more-wrap>.item{width:100%;}
+.nav-menu{position:absolute;right:0;bottom:calc(100% + 10px);display:grid;min-width:170px;padding:7px;border:1px solid rgba(255,255,255,.9);border-radius:15px;background:rgba(252,252,248,.94);box-shadow:0 14px 30px rgba(18,52,58,.2);backdrop-filter:blur(24px) saturate(1.5);-webkit-backdrop-filter:blur(24px) saturate(1.5);}
+.nav-menu[hidden]{display:none;}
+.nav-menu button{border:0;border-radius:9px;padding:10px 11px;background:transparent;color:var(--ink);font:600 12px inherit;text-align:left;cursor:pointer;}
+.nav-menu button:hover{background:var(--info-soft);}
+.nav-menu-label{padding:5px 11px 4px;color:var(--primary);font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
+.nav-menu-divider{height:1px;margin:5px 4px;background:var(--line);}
 @keyframes glass-nav-pop{0%{transform:translateY(1px) scale(.94);opacity:.7}70%{transform:translateY(-4px) scale(1.03)}100%{transform:translateY(-3px) scale(1);opacity:1}}
 @media (prefers-reduced-motion:reduce){.navbar .item{transition:none}.navbar .item.active{animation:none}}
 

@@ -36,6 +36,9 @@ let boardRealtimeCleanup = null;
 
 // ── Shell ────────────────────────────────────────────────────────────
 function shell(navActive, innerHTML) {
+  const isOwner = ['owner', 'platform_owner'].includes(state.staff?.role);
+  const canManage = ['owner', 'platform_owner', 'manager'].includes(state.staff?.role);
+  const moreActive = ['overview', 'analytics', 'settings'].includes(navActive);
   const tenant = api.getActiveTenant();
   const locations = state.tenants.locations || [];
   const currentLocation = locations.find(item => item.id === tenant.locationId);
@@ -53,13 +56,10 @@ function shell(navActive, innerHTML) {
       <div class="screen">${innerHTML}</div>
       ${navActive ? `
       <div class="navbar">
-        ${['owner', 'platform_owner'].includes(state.staff?.role) ? `<button type="button" class="item ${navActive==='overview'?'active':''}" data-nav="#/staff/overview">Overview</button>` : ''}
-        ${['owner', 'platform_owner'].includes(state.staff?.role) ? `<button type="button" class="item ${navActive==='analytics'?'active':''}" data-nav="#/staff/analytics">Analytics</button>` : ''}
         <button type="button" class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</button>
-        <button type="button" class="item ${navActive==='settings'?'active':''}" data-nav="#/staff/settings">Settings</button>
-        <button type="button" class="item ${navActive==='organization'?'active':''}" data-nav="#/staff/organization">Manage</button>
-        <button type="button" class="item ${navActive==='history'?'active':''}" data-nav="#/staff/history">History</button>
-        <button type="button" class="item" data-signout="1">Sign out</button>
+        <button type="button" class="item ${navActive==='history'?'active':''}" data-nav="#/staff/history">Bookings</button>
+        ${canManage ? `<button type="button" class="item ${navActive==='organization'?'active':''}" data-nav="#/staff/organization">Manage</button>` : ''}
+        <div class="nav-more-wrap"><button type="button" class="item ${moreActive?'active':''}" data-menu-toggle aria-expanded="false" aria-controls="navMenu">More <span aria-hidden="true">☰</span></button><div class="nav-menu" id="navMenu" hidden>${isOwner ? `<div class="nav-menu-label">Insights</div><button type="button" data-nav="#/staff/overview">Overview</button><button type="button" data-nav="#/staff/analytics">Analytics</button><div class="nav-menu-divider"></div><button type="button" data-nav="#/staff/settings">Settings</button>` : ''}<button type="button" data-signout="1">Sign out</button></div></div>
       </div>` : ''}
     </div>`;
 }
@@ -691,7 +691,7 @@ async function pageStaffSettings() {
   const myGen = ++renderGen;
   const staff = await requireStaff(myGen);
   if (!staff) return;
-  if (staff.role !== 'owner') {
+  if (!['owner', 'platform_owner'].includes(staff.role)) {
     app.innerHTML = shell('settings', `<div class="eyebrow">Configuration</div><h2>Owner only</h2><p class="lead">Ask the owner to change booking settings.</p>`);
     wireNav();
     return;
@@ -976,6 +976,12 @@ async function pageCustomerBook() {
 // exactly the symptom delegation-vs-direct-binding differences can cause.
 function wireNav() {
   document.querySelectorAll('[data-nav]').forEach(el => el.onclick = () => { location.hash = el.dataset.nav; });
+  document.querySelectorAll('[data-menu-toggle]').forEach(el => el.onclick = () => {
+    const menu = document.getElementById(el.getAttribute('aria-controls'));
+    if (!menu) return;
+    menu.hidden = !menu.hidden;
+    el.setAttribute('aria-expanded', String(!menu.hidden));
+  });
   const tenantSelect = document.getElementById('tenantSelect');
   if (tenantSelect) tenantSelect.onchange = () => {
     const [providerId, locationId] = tenantSelect.value.split('|');
