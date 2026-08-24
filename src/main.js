@@ -48,7 +48,7 @@ function shell(navActive, innerHTML) {
     <div class="app-shell">
       <div class="topbar">
         <div class="brand"><div class="drop"></div>Docket</div>
-        ${navActive && tenantOptions ? `<div class="tenant-picker"><span>${h(currentProvider?.name || '')}</span><select id="tenantSelect" aria-label="Active location">${tenantOptions}</select>${currentLocation?.address ? `<small>${h(currentLocation.address)}</small>` : ''}</div>` : ''}
+        ${navActive && tenantOptions ? `<div class="tenant-picker"><span>${h(currentProvider?.name || '')}</span><select id="tenantSelect" aria-label="Active location">${tenantOptions}</select></div>` : ''}
       </div>
       <div class="screen">${innerHTML}</div>
       ${navActive ? `
