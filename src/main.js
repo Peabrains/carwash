@@ -54,6 +54,7 @@ function shell(navActive, innerHTML) {
       ${navActive ? `
       <div class="navbar">
         ${['owner', 'platform_owner'].includes(state.staff?.role) ? `<button type="button" class="item ${navActive==='overview'?'active':''}" data-nav="#/staff/overview">Overview</button>` : ''}
+        ${['owner', 'platform_owner'].includes(state.staff?.role) ? `<button type="button" class="item ${navActive==='analytics'?'active':''}" data-nav="#/staff/analytics">Analytics</button>` : ''}
         <button type="button" class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</button>
         <button type="button" class="item ${navActive==='settings'?'active':''}" data-nav="#/staff/settings">Settings</button>
         <button type="button" class="item ${navActive==='organization'?'active':''}" data-nav="#/staff/organization">Manage</button>
@@ -627,6 +628,51 @@ async function pageStaffOverview() {
   }
 }
 
+async function pageStaffAnalytics() {
+  const myGen = ++renderGen;
+  const staff = await requireStaff(myGen);
+  if (!staff) return;
+  if (!['owner', 'platform_owner'].includes(staff.role)) {
+    app.innerHTML = shell('analytics', `<div class="eyebrow">Owner analytics</div><h2>Owner access only</h2><p class="lead">This page is for provider owners and platform operators.</p>`);
+    wireNav();
+    return;
+  }
+  try {
+    const [history, bays, settings] = await Promise.all([api.getBookingHistory(), api.getActiveBays({ includeInactive: true }), api.getBookingSettings()]);
+    if (myGen !== renderGen) return;
+    const today = localDateISO(new Date());
+    const render = (days = 30) => {
+      const end = new Date(`${today}T23:59:59+08:00`);
+      const start = new Date(end.getTime() - (Number(days) - 1) * 86400000);
+      const startISO = localDateISO(start);
+      const range = history.filter(item => item.scheduled_date >= startISO && item.scheduled_date <= today);
+      const active = range.filter(item => item.status !== 'cancelled');
+      const completed = active.filter(item => item.status === 'completed').length;
+      const cancelled = range.filter(item => item.status === 'cancelled').length;
+      const value = active.reduce((sum, item) => sum + Number(item.price_myr || 0), 0);
+      const serviceCounts = Object.values(active.reduce((map, item) => { const name = item.services?.name || 'Other'; map[name] ||= { name, count: 0, value: 0 }; map[name].count += 1; map[name].value += Number(item.price_myr || 0); return map; }, {})).sort((a, b) => b.count - a.count);
+      const bayCounts = bays.map(bay => ({ name: bay.name, count: active.filter(item => item.bay_id === bay.id).length })).sort((a, b) => b.count - a.count);
+      const bookedMinutes = active.reduce((sum, item) => sum + Number(item.duration_minutes || item.services?.duration_minutes || 0), 0);
+      const openMinutes = Math.max(0, Number(settings.weekday_close?.slice(0, 2) || 0) * 60 - Number(settings.weekday_open?.slice(0, 2) || 0) * 60);
+      const capacityMinutes = openMinutes * Math.max(1, bays.filter(item => item.is_active !== false && item.status !== 'maintenance').length) * Number(days);
+      const utilization = capacityMinutes ? Math.min(100, Math.round(bookedMinutes / capacityMinutes * 100)) : 0;
+      const completionRate = active.length ? Math.round(completed / active.length * 100) : 0;
+      const cancellationRate = range.length ? Math.round(cancelled / range.length * 100) : 0;
+      const topServices = serviceCounts.slice(0, 5).map(item => `<div class="analytics-row"><div><strong>${h(item.name)}</strong><span>${item.count} booking${item.count === 1 ? '' : 's'}</span></div><strong>RM ${item.value.toFixed(2)}</strong></div>`).join('') || '<p class="muted">No bookings in this period.</p>';
+      const topBays = bayCounts.slice(0, 5).map(item => `<div class="analytics-row"><div><strong>${h(item.name)}</strong><span>Scheduled washes</span></div><strong>${item.count}</strong></div>`).join('') || '<p class="muted">No bay data in this period.</p>';
+      app.innerHTML = shell('analytics', `<header class="overview-head"><div><div class="eyebrow">Owner analytics</div><h2>Know what is driving the wash</h2><p class="lead">Demand, revenue and operating performance for the selected outlet.</p></div><label class="analytics-filter">Period<select id="analyticsRange"><option value="7" ${days === 7 ? 'selected' : ''}>Last 7 days</option><option value="30" ${days === 30 ? 'selected' : ''}>Last 30 days</option><option value="90" ${days === 90 ? 'selected' : ''}>Last 90 days</option></select></label></header><section class="overview-metrics"><article><span>Bookings</span><strong>${range.length}</strong><small>${completed} completed · ${cancelled} cancelled</small></article><article><span>Booked value</span><strong>RM ${value.toFixed(2)}</strong><small>before refunds or fees</small></article><article><span>Completion rate</span><strong>${completionRate}%</strong><small>${active.length ? 'of non-cancelled bookings' : 'No bookings yet'}</small></article><article><span>Bay utilization</span><strong>${utilization}%</strong><small>${bookedMinutes} booked minutes</small></article></section><section class="analytics-summary"><div><span>Cancellation rate</span><strong>${cancellationRate}%</strong><small>includes all cancellations in range</small></div><div><span>Active bays</span><strong>${bays.filter(item => item.is_active !== false && item.status !== 'maintenance').length}</strong><small>excluding maintenance bays</small></div><div><span>Top service</span><strong>${h(serviceCounts[0]?.name || '—')}</strong><small>${serviceCounts[0] ? `${serviceCounts[0].count} bookings` : 'No data yet'}</small></div></section><div class="overview-grid"><section class="overview-panel"><div class="section-heading"><div><h3>Popular services</h3><p>Which services customers are choosing.</p></div></div>${topServices}</section><section class="overview-panel"><div class="section-heading"><div><h3>Bay workload</h3><p>Bookings assigned to each bay.</p></div></div>${topBays}</section></div>`);
+      document.getElementById('analyticsRange')?.addEventListener('change', event => render(Number(event.target.value)));
+      wireNav();
+    };
+    render();
+  } catch (error) {
+    if (myGen !== renderGen) return;
+    app.innerHTML = shell('analytics', `<div class="eyebrow">Owner analytics</div><h2>Could not load analytics</h2><p class="lead" style="color:#b3261e">${h(error?.message || 'Unknown error')}</p><button class="btn" id="retryAnalytics">Try again</button>`);
+    wireNav();
+    document.getElementById('retryAnalytics').onclick = pageStaffAnalytics;
+  }
+}
+
 async function pageStaffSettings() {
   const myGen = ++renderGen;
   const staff = await requireStaff(myGen);
@@ -935,6 +981,7 @@ const routes = {
   '#/staff/login': pageStaffLogin,
   '#/staff/board': pageStaffBoard,
   '#/staff/overview': pageStaffOverview,
+  '#/staff/analytics': pageStaffAnalytics,
   '#/staff/history': pageStaffHistory,
   '#/staff/settings': pageStaffSettings,
   '#/staff/organization': pageStaffOrganization,
