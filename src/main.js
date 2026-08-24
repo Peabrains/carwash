@@ -400,7 +400,7 @@ async function pageStaffBoard(dateISO) {
     </div>
     ${isToday ? '<p class="lead">Tags show real-time walk-in availability. Gray blocks are scheduled crew breaks.</p>' : ''}
     ${attentionSection}
-    ${staff.role === 'owner' ? `<section class="bay-actions"><div class="bay-actions-head"><strong>Bay status</strong><span>Report maintenance windows before they affect bookings.</span></div><div class="bay-action-list">${bays.map(b => b.status === 'maintenance' ? `<button class="mini-btn" data-bring-up="${b.id}">Bring ${b.name} back online</button>` : `<button class="mini-btn" data-report="${b.id}">Report ${b.name} down</button>`).join('')}</div></section>` : ''}
+    <div class="calendar-toolbar"><div><strong>Bay schedule</strong><span>${bays.length} active bay${bays.length === 1 ? '' : 's'}</span></div>${staff.role === 'owner' ? '<button class="calendar-outage-btn" id="reportBayOutage" type="button">Report outage</button>' : ''}</div>
     <div class="cal-wrap">
       <div class="cal-grid" style="grid-template-columns:44px repeat(${bays.length},minmax(140px,1fr))">
         <div class="cal-gutter-head"></div>
@@ -434,20 +434,15 @@ async function pageStaffBoard(dateISO) {
     if (description === null) return;
     try { await api.resolveAppointmentAttention(a.id, { description, archive: false }); pageStaffBoard(date); } catch (error) { alert(`Could not clear attention item: ${error?.message || 'Unknown error'}`); }
   });
-  document.querySelectorAll('[data-report]').forEach(el => el.onclick = async () => {
-    const values = await bayDownDetails(el.dataset.report, date);
+  document.getElementById('reportBayOutage')?.addEventListener('click', async () => {
+    const values = await bayDownDetails(bays[0]?.id, date, null, bays);
     if (!values) return;
     try {
-      const res = await api.reportBayDown(el.dataset.report, values);
+      const res = await api.reportBayDown(values.bayId, values);
       if (myGen !== renderGen) return;
       alert(`Bay outage recorded. ${res.flagged ?? 0} booking(s) were checked for reassignment.`);
       pageStaffBoard(date);
     } catch (error) { alert(`Could not save bay outage: ${error?.message || 'Unknown error'}`); }
-  });
-  document.querySelectorAll('[data-bring-up]').forEach(el => el.onclick = async () => {
-    await api.bringBayUp(el.dataset.bringUp);
-    if (myGen !== renderGen) return;
-    pageStaffBoard(date);
   });
   document.querySelectorAll('[data-closure-edit]').forEach(el => el.onclick = async () => {
     const closure = closures.find(c => c.id === el.dataset.closureEdit);
@@ -497,7 +492,7 @@ function timeOptions(selected) {
   return html;
 }
 
-async function bayDownDetails(bayId, dateISO, existing = null) {
+async function bayDownDetails(bayId, dateISO, existing = null, selectableBays = []) {
   const now = new Date();
   const existingStart = existing?.starts_at ? new Date(existing.starts_at) : null;
   const existingEnd = existing?.ends_at ? new Date(existing.ends_at) : null;
@@ -516,6 +511,7 @@ async function bayDownDetails(bayId, dateISO, existing = null) {
       <div class="modal-card outage-modal">
         <h3>${isEditing ? 'Amend bay outage' : 'Report bay down'}</h3>
         <p class="lead">${isEditing ? 'Update the outage window or reason, then save.' : 'Choose exactly when this bay is unavailable. Existing bookings in this window will be checked.'}</p>
+        ${!isEditing && selectableBays.length ? `<div class="field"><label>Bay</label><select id="outageBay">${selectableBays.map(bay => `<option value="${h(bay.id)}" ${bay.id === bayId ? 'selected' : ''}>${h(bay.name)}</option>`).join('')}</select></div>` : ''}
         <div class="field"><label>Starts</label><div class="outage-datetime">
           <input id="outageStartDate" type="date" value="${dateValue(startDate)}">
           <select id="outageStartTime">${timeOptions(timeValue(startDate))}</select>
@@ -545,7 +541,7 @@ async function bayDownDetails(bayId, dateISO, existing = null) {
         alert('Please choose a valid window with the end after the start.');
         return;
       }
-      close({ startsAt: start.toISOString(), endsAt: end.toISOString(), reason: overlay.querySelector('#outageReason').value.trim() });
+      close({ bayId: overlay.querySelector('#outageBay')?.value || bayId, startsAt: start.toISOString(), endsAt: end.toISOString(), reason: overlay.querySelector('#outageReason').value.trim() });
     };
   });
 }
@@ -619,8 +615,8 @@ async function pageStaffSettings() {
     <div class="settings-block">${breakRows}</div>
     <div class="settings-row crew-break-form">
       <label class="crew-control"><span>Bay</span><select id="breakBay">${bayOptions}</select></label>
-      <label class="crew-control"><span>Start time</span><input id="breakStart" type="time" value="14:30"/></label>
-      <label class="crew-control"><span>Minutes</span><input id="breakDuration" type="number" value="30" title="minutes"/></label>
+      <label class="crew-control"><span>Start</span><input id="breakStart" type="time" value="14:30"/></label>
+      <label class="crew-control"><span>Min</span><input id="breakDuration" type="number" value="30" title="minutes"/></label>
       <button class="mini-btn" id="addBreak">Add</button>
     </div>
   `);
@@ -677,10 +673,10 @@ async function pageStaffOrganization() {
   if (myGen !== renderGen) return;
 
   const serviceRows = services.map(service => `<div class="manage-grid manage-service" data-service-row="${h(service.id)}">
-    <label class="manage-control"><span>Service name</span><input data-field="name" value="${h(service.name)}" aria-label="Service name"></label>
-    <label class="manage-control"><span>Duration (min)</span><input data-field="duration" type="number" min="1" value="${Number(service.duration_minutes)}" aria-label="Duration in minutes"></label>
-    <label class="manage-control"><span>Price (RM)</span><input data-field="price" type="number" min="0" step="0.01" value="${Number(service.price_myr)}" aria-label="Price in ringgit"></label>
-    <label class="check"><input data-field="active" type="checkbox" ${service.is_active !== false ? 'checked' : ''}> Active</label>
+    <label class="manage-control"><span>Service</span><input data-field="name" value="${h(service.name)}" aria-label="Service name"></label>
+    <label class="manage-control"><span>Dur</span><input data-field="duration" type="number" min="1" value="${Number(service.duration_minutes)}" aria-label="Duration in minutes"></label>
+    <label class="manage-control"><span>RM</span><input data-field="price" type="number" min="0" step="0.01" value="${Number(service.price_myr)}" aria-label="Price in ringgit"></label>
+    <label class="check service-active"><input data-field="active" type="checkbox" ${service.is_active !== false ? 'checked' : ''}><span>Book</span></label>
     <button class="mini-btn" data-save-service="${h(service.id)}">Save</button>
   </div>`).join('') || '<p class="lead">No services configured for this location.</p>';
   const bayRows = bays.map(bay => `<div class="manage-grid manage-bay" data-bay-row="${h(bay.id)}">
@@ -714,11 +710,11 @@ async function pageStaffOrganization() {
     <section class="management-section">
       <h3>Services</h3>
       <p class="lead">Name, wash duration, price (RM), and whether customers can book it.</p>
-      <div class="manage-list">${serviceRows}</div>
+      <div class="manage-service-head" aria-hidden="true"><span>Name</span><span>Dur</span><span>RM</span><span>Book</span><span></span></div><div class="manage-list">${serviceRows}</div>
       <div class="manage-grid manage-service new-row">
-        <label class="manage-control"><span>Service name</span><input id="newServiceName" placeholder="New service"></label>
-        <label class="manage-control"><span>Duration (min)</span><input id="newServiceDuration" type="number" min="1" value="30" aria-label="Duration"></label>
-        <label class="manage-control"><span>Price (RM)</span><input id="newServicePrice" type="number" min="0" step="0.01" value="0" aria-label="Price"></label>
+        <label class="manage-control"><span>Service</span><input id="newServiceName" placeholder="New service"></label>
+        <label class="manage-control"><span>Dur</span><input id="newServiceDuration" type="number" min="1" value="30" aria-label="Duration"></label>
+        <label class="manage-control"><span>RM</span><input id="newServicePrice" type="number" min="0" step="0.01" value="0" aria-label="Price"></label>
         <span></span><button class="mini-btn" id="addService">Add</button>
       </div>
     </section>
