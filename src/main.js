@@ -621,9 +621,9 @@ async function pageStaffSettings() {
     <div class="settings-dashboard">
       <section class="settings-block settings-card">
         <div class="section-heading"><div><h3>Booking rules</h3><p>Control how early and how far ahead customers can book.</p></div><span class="section-icon">01</span></div>
-        <div class="settings-row"><div><strong>Minimum lead time</strong><small>Notice required before an appointment</small></div><label class="compact-number"><input id="lead" type="number" min="0" value="${s.min_lead_minutes}"><span>min</span></label></div>
-        <div class="settings-row"><div><strong>Advance window</strong><small>Furthest date customers may select</small></div><label class="compact-number"><input id="advance" type="number" min="0" value="${s.max_advance_days}"><span>days</span></label></div>
-        <div class="settings-row"><div><strong>Bay buffer</strong><small>Rest time after every wash</small></div><label class="compact-number"><input id="buffer" type="number" min="0" value="${s.buffer_minutes}"><span>min</span></label></div>
+        <div class="settings-row"><div><strong>Minimum lead time</strong><small>Notice required before an appointment</small></div><label class="compact-number"><input id="lead" type="text" inputmode="numeric" pattern="[0-9]*" value="${s.min_lead_minutes}"><span>min</span></label></div>
+        <div class="settings-row"><div><strong>Advance window</strong><small>Furthest date customers may select</small></div><label class="compact-number"><input id="advance" type="text" inputmode="numeric" pattern="[0-9]*" value="${s.max_advance_days}"><span>days</span></label></div>
+        <div class="settings-row"><div><strong>Bay buffer</strong><small>Rest time after every wash</small></div><label class="compact-number"><input id="buffer" type="text" inputmode="numeric" pattern="[0-9]*" value="${s.buffer_minutes}"><span>min</span></label></div>
       </section>
 
       <section class="settings-block settings-card">
@@ -640,7 +640,7 @@ async function pageStaffSettings() {
       <div class="crew-break-form">
         <label class="crew-control"><span>Bay</span><select id="breakBay">${bayOptions}</select></label>
         <label class="crew-control"><span>Start</span><input id="breakStart" type="time" value="14:30"></label>
-        <label class="crew-control"><span>Duration</span><div class="compact-number"><input id="breakDuration" type="number" min="1" value="30" title="minutes"><span>min</span></div></label>
+        <label class="crew-control"><span>Duration</span><div class="compact-number"><input id="breakDuration" type="text" inputmode="numeric" pattern="[0-9]*" value="30" title="minutes"><span>min</span></div></label>
         <button class="mini-btn" id="addBreak">Add break</button>
       </div>
     </section>
