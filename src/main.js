@@ -617,36 +617,33 @@ async function pageStaffSettings() {
     </div>`).join('') || '<p class="lead">No crew breaks scheduled yet.</p>';
 
   app.innerHTML = shell('settings', `
-    <div class="eyebrow">Configuration</div>
-    <h2>Booking window</h2>
-    <div class="settings-block">
-      <div class="settings-row"><div>Minimum lead time (minutes)</div>
-        <input id="lead" type="number" value="${s.min_lead_minutes}" style="width:80px"/></div>
-      <div class="settings-row"><div>Maximum advance booking (days)</div>
-        <input id="advance" type="number" value="${s.max_advance_days}" style="width:80px"/></div>
-      <div class="settings-row"><div>Buffer / rest time after each wash (minutes)</div>
-        <input id="buffer" type="number" value="${s.buffer_minutes}" style="width:80px"/></div>
+    <header class="settings-page-head"><div><div class="eyebrow">Configuration</div><h2>Booking settings</h2><p class="lead">Rules shared by customer booking, Telegram and the bay board.</p></div><button class="btn settings-save" id="save">Save changes</button></header>
+    <div class="settings-dashboard">
+      <section class="settings-block settings-card">
+        <div class="section-heading"><div><h3>Booking rules</h3><p>Control how early and how far ahead customers can book.</p></div><span class="section-icon">01</span></div>
+        <div class="settings-row"><div><strong>Minimum lead time</strong><small>Notice required before an appointment</small></div><label class="compact-number"><input id="lead" type="number" min="0" value="${s.min_lead_minutes}"><span>min</span></label></div>
+        <div class="settings-row"><div><strong>Advance window</strong><small>Furthest date customers may select</small></div><label class="compact-number"><input id="advance" type="number" min="0" value="${s.max_advance_days}"><span>days</span></label></div>
+        <div class="settings-row"><div><strong>Bay buffer</strong><small>Rest time after every wash</small></div><label class="compact-number"><input id="buffer" type="number" min="0" value="${s.buffer_minutes}"><span>min</span></label></div>
+      </section>
+
+      <section class="settings-block settings-card">
+        <div class="section-heading"><div><h3>Operating hours</h3><p>Availability shown to customers and staff.</p></div><span class="section-icon">02</span></div>
+        <div class="hours-grid-head" aria-hidden="true"><span></span><span>Opens</span><span>Closes</span></div>
+        <div class="hours-row"><strong>Weekdays</strong><input id="weekdayOpen" type="time" value="${s.weekday_open.slice(0,5)}"><input id="weekdayClose" type="time" value="${s.weekday_close.slice(0,5)}"></div>
+        <div class="hours-row"><strong>Weekends</strong><input id="weekendOpen" type="time" value="${s.weekend_open.slice(0,5)}"><input id="weekendClose" type="time" value="${s.weekend_close.slice(0,5)}"></div>
+      </section>
     </div>
 
-    <h2 style="margin-top:32px">Operating hours</h2>
-    <p class="lead">Used by both the bay board and the booking bot to decide what counts as a bookable time.</p>
-    <div class="settings-block">
-      <div class="settings-row"><div>Weekday open</div><input id="weekdayOpen" type="time" value="${s.weekday_open.slice(0,5)}"/></div>
-      <div class="settings-row"><div>Weekday close</div><input id="weekdayClose" type="time" value="${s.weekday_close.slice(0,5)}"/></div>
-      <div class="settings-row"><div>Weekend open</div><input id="weekendOpen" type="time" value="${s.weekend_open.slice(0,5)}"/></div>
-      <div class="settings-row"><div>Weekend close</div><input id="weekendClose" type="time" value="${s.weekend_close.slice(0,5)}"/></div>
-    </div>
-    <button class="btn" id="save" style="max-width:220px">Save changes</button>
-
-    <h2 style="margin-top:32px">Crew breaks</h2>
-    <p class="lead">Staggered per bay, kept outside your peak hours so bays don't all go down at once. Applies every day.</p>
-    <div class="settings-block">${breakRows}</div>
-    <div class="settings-row crew-break-form">
-      <label class="crew-control"><span>Bay</span><select id="breakBay">${bayOptions}</select></label>
-      <label class="crew-control"><span>Start</span><input id="breakStart" type="time" value="14:30"/></label>
-      <label class="crew-control"><span>Min</span><input id="breakDuration" type="number" value="30" title="minutes"/></label>
-      <button class="mini-btn" id="addBreak">Add</button>
-    </div>
+    <section class="settings-block crew-break-card">
+      <div class="section-heading"><div><h3>Crew breaks</h3><p>Recurring daily breaks by bay. Stagger them to preserve capacity.</p></div><span class="section-count">${breaks.length} scheduled</span></div>
+      <div class="break-list">${breakRows}</div>
+      <div class="crew-break-form">
+        <label class="crew-control"><span>Bay</span><select id="breakBay">${bayOptions}</select></label>
+        <label class="crew-control"><span>Start</span><input id="breakStart" type="time" value="14:30"></label>
+        <label class="crew-control"><span>Duration</span><div class="compact-number"><input id="breakDuration" type="number" min="1" value="30" title="minutes"><span>min</span></div></label>
+        <button class="mini-btn" id="addBreak">Add break</button>
+      </div>
+    </section>
   `);
 
   document.getElementById('save').onclick = async () => {
@@ -715,29 +712,28 @@ async function pageStaffOrganization() {
   </div>`).join('') || '<p class="lead">No bays configured for this location.</p>';
   const staffRows = staffMembers.map(member => `<div class="settings-row"><div><strong>${h(member.name || member.email || member.id)}</strong><div class="muted">${h(member.email || member.id)} · ${h(member.role)}</div></div><span class="tag ${member.is_active === false ? 'busy' : ''}">${member.is_active === false ? 'Inactive' : 'Active'}</span></div>`).join('') || '<p class="lead">No staff assigned to this location.</p>';
   const providerProfileSection = ['platform_owner', 'owner'].includes(staff.role)
-    ? `<section class="management-section"><h3>Provider profile</h3><p class="lead">This is what customers see in the provider catalogue.</p><div class="manage-form two-col"><div class="field"><label>Provider name</label><input id="providerName" value="${h(provider?.name || '')}"></div><div class="field span-two"><label>Description</label><input id="providerDescription" value="${h(provider?.description || '')}" placeholder="What makes this car wash different?"></div></div><button class="btn compact" id="saveProviderProfile">Save provider profile</button></section>`
-    : `<section class="management-section"><h3>Provider profile</h3><p class="lead">${h(provider?.name || tenant.providerId)}${provider?.description ? ` — ${h(provider.description)}` : ''}</p></section>`;
+    ? `<section class="management-section profile-section"><div class="section-heading"><div><h3>Provider profile</h3><p>Public information shown in the customer catalogue.</p></div><span class="section-icon">01</span></div><div class="manage-form"><div class="field"><label>Provider name</label><input id="providerName" value="${h(provider?.name || '')}"></div><div class="field"><label>Description</label><input id="providerDescription" value="${h(provider?.description || '')}" placeholder="What makes this car wash different?"></div></div><button class="btn compact" id="saveProviderProfile">Save profile</button></section>`
+    : `<section class="management-section profile-section"><div class="section-heading"><div><h3>Provider profile</h3><p>Public information shown in the customer catalogue.</p></div></div><p class="lead">${h(provider?.name || tenant.providerId)}${provider?.description ? ` — ${h(provider.description)}` : ''}</p></section>`;
 
   app.innerHTML = shell('organization', `
-    <div class="eyebrow">Management</div>
-    <h2>${h(provider?.name || tenant.providerId)}</h2>
-    <p class="lead">Manage the selected location. Every change is isolated to this provider and location.</p>
+    <header class="manage-page-head"><div><div class="eyebrow">Business setup</div><h2>${h(provider?.name || tenant.providerId)}</h2><p class="lead">Configure ${h(location?.name || 'this location')} without affecting other outlets.</p></div><div class="manage-summary"><span><strong>${services.length}</strong> services</span><span><strong>${bays.length}</strong> bays</span><span><strong>${staffMembers.length}</strong> staff</span></div></header>
 
-    ${providerProfileSection}
-
-    <section class="management-section">
-      <h3>Location</h3>
+    <div class="management-top-grid">
+      ${providerProfileSection}
+      <section class="management-section location-section">
+      <div class="section-heading"><div><h3>Location</h3><p>Outlet identity, address and local timezone.</p></div><span class="section-icon">02</span></div>
       <div class="manage-form two-col">
         <div class="field"><label>Location name</label><input id="locationName" value="${h(location?.name || '')}"></div>
         <div class="field"><label>Timezone</label><input id="locationTimezone" value="${h(location?.timezone || 'Asia/Kuala_Lumpur')}"></div>
         <div class="field span-two"><label>Address</label><input id="locationAddress" value="${h(location?.address || '')}"></div>
       </div>
       <button class="btn compact" id="saveLocation">Save location</button>
-    </section>
+      </section>
+    </div>
 
-    <section class="management-section">
-      <h3>Services</h3>
-      <p class="lead">Name, wash duration, price (RM), and whether customers can book it.</p>
+    <div class="management-ops-grid">
+    <section class="management-section services-section">
+      <div class="section-heading"><div><h3>Services</h3><p>Customer-facing wash menu for this location.</p></div><span class="section-count">${services.length} total</span></div>
       <div class="manage-service-head" aria-hidden="true"><span>Name</span><span>Dur</span><span>RM</span><span>Book</span><span>Save</span></div><div class="manage-list">${serviceRows}</div>
       <div class="manage-grid manage-service new-row">
         <label class="manage-control"><span>Service</span><input id="newServiceName" placeholder="New service"></label>
@@ -747,15 +743,16 @@ async function pageStaffOrganization() {
       </div>
     </section>
 
-    <section class="management-section">
-      <h3>Bays</h3>
-      <p class="lead">Inactive bays are hidden completely. Maintenance bays stay visible but cannot accept bookings.</p>
+    <section class="management-section bays-section">
+      <div class="section-heading"><div><h3>Bays</h3><p>Capacity and current operating state.</p></div><span class="section-count">${bays.length} total</span></div>
       <div class="manage-bay-head" aria-hidden="true"><span>Name</span><span>Status</span><span>Active</span><span>Save</span></div><div class="manage-list">${bayRows}</div>
       <div class="manage-grid manage-bay new-row"><label class="manage-control"><span>Bay</span><input id="newBayName" placeholder="New bay"></label><span class="new-bay-status">Open</span><span></span><button class="mini-btn" id="addBay">Add</button></div>
     </section>
+    </div>
 
-    ${staff.role !== 'manager' ? `<section class="management-section">
-      <h3>Staff access</h3><p class="lead">A staff member must sign in with Google once before you add them here. Then assign their role and location access.</p><div class="manage-list">${staffRows}</div>
+    <div class="management-admin-grid">
+    ${staff.role !== 'manager' ? `<section class="management-section staff-section">
+      <div class="section-heading"><div><h3>Staff access</h3><p>Assign roles after the staff member has signed in once.</p></div><span class="section-count">${staffMembers.length} people</span></div><div class="manage-list staff-list">${staffRows}</div>
       <div class="manage-form three-col">
         <div class="field"><label>Email</label><input id="staffEmail" type="email" placeholder="staff@example.com"></div>
         <div class="field"><label>Name</label><input id="staffName" placeholder="Staff name"></div>
@@ -763,14 +760,14 @@ async function pageStaffOrganization() {
         </div><p id="staffMessage" class="lead" role="status"></p><button class="btn compact" id="addStaff">Add or update staff</button>
     </section>` : ''}
 
-    ${['platform_owner', 'owner'].includes(staff.role) ? `<section class="management-section">
-      <h3>Locations</h3>
-      <p class="lead">Add another outlet to the selected provider.</p>
+    ${['platform_owner', 'owner'].includes(staff.role) ? `<section class="management-section locations-section">
+      <div class="section-heading"><div><h3>Add an outlet</h3><p>Create another location under this provider.</p></div><span class="section-icon">+</span></div>
       <div class="manage-form two-col">
         <div class="field"><label>New location name</label><input id="newLocationName" placeholder="Outlet name"></div>
         <div class="field"><label>Address</label><input id="newLocationAddress" placeholder="Address"></div>
       </div><button class="btn compact" id="addLocation">Add location to ${h(provider?.name || tenant.providerId)}</button>
     </section>` : ''}
+    </div>
     ${staff.role === 'platform_owner' ? `<section class="management-section platform-section">
       <h3>Platform administration</h3>
       <p class="lead">Create another independent car-wash provider.</p>
