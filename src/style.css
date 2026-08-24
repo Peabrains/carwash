@@ -579,3 +579,32 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
   .day-summary-panel{display:none;}
   .settings-dashboard,.management-top-grid,.management-ops-grid,.management-admin-grid{grid-template-columns:1fr;}
 }
+
+/* Unified control typography: keep fields readable and consistent across
+   customer, staff, settings and management screens. */
+.field input,
+.field select,
+.field textarea,
+.history-search input,
+.catalogue-search,
+.customer-manage .field select,
+.outage-datetime input,
+.outage-datetime select,
+.outage-modal select,
+.manage-grid input:not([type="checkbox"]):not([type="radio"]),
+.manage-grid select,
+.manage-form input:not([type="checkbox"]):not([type="radio"]),
+.manage-form select,
+.hours-row input,
+.crew-break-form input:not([type="checkbox"]):not([type="radio"]),
+.crew-break-form select,
+.manage-control input:not([type="checkbox"]):not([type="radio"]),
+.manage-control select {
+  font-size:13px;
+}
+
+/* Numeric controls use the same 13px scale rather than shrinking further. */
+.compact-number input,
+.crew-break-form .compact-number input {
+  font-size:13px;
+}
