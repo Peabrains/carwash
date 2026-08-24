@@ -791,6 +791,37 @@ async function pageStaffOrganization() {
   wireNav();
 }
 
+function pageCustomerLanding() {
+  app.innerHTML = `<div class="app-shell landing-shell">
+    <div class="topbar landing-topbar"><div class="brand"><div class="drop"></div> Docket</div><a class="topbar-link" href="#/staff/login">Provider & staff sign in</a></div>
+    <main class="screen landing-screen">
+      <section class="landing-hero" aria-labelledby="landing-title">
+        <div class="eyebrow">Car wash bookings, made simple</div>
+        <h1 id="landing-title">Find a wash that fits your day.</h1>
+        <p class="lead">Compare local car wash providers, prices and live availability in one place.</p>
+        <div class="landing-actions" aria-label="Booking options">
+          <a class="landing-action primary" href="#/book"><span><strong>Book as a guest</strong><small>Fast booking with just your name and mobile number</small></span><span aria-hidden="true">→</span></a>
+          <button class="landing-action" type="button" data-customer-login><span><strong>Sign in or create an account</strong><small>Save vehicles, view history and rebook faster</small></span><span aria-hidden="true">→</span></button>
+        </div>
+        <p class="landing-note" id="customerLoginNote" role="status" hidden>Customer accounts are being prepared. You can book now as a guest without losing your booking reference.</p>
+      </section>
+      <section class="landing-steps" aria-label="How booking works">
+        <div><span class="step-number">1</span><strong>Choose when</strong><small>Search by date and preferred time</small></div>
+        <div><span class="step-number">2</span><strong>Compare nearby</strong><small>See providers, services and prices</small></div>
+        <div><span class="step-number">3</span><strong>Book a real slot</strong><small>Get a reference instantly</small></div>
+      </section>
+      <section class="landing-secondary" aria-labelledby="manage-title">
+        <div><div class="eyebrow">Already booked?</div><h2 id="manage-title">Manage your appointment</h2><p class="lead">Use your reference number and mobile number to move or cancel a booking.</p></div>
+        <a class="btn secondary landing-manage" href="#/book">Find my booking</a>
+      </section>
+    </main>
+  </div>`;
+  document.querySelector('[data-customer-login]').onclick = () => {
+    const note = document.getElementById('customerLoginNote');
+    note.hidden = false;
+  };
+}
+
 async function pageCustomerBook() {
   app.innerHTML = `<div class="app-shell"><div class="topbar"><div class="brand"><div class="drop"></div>Wash Point</div></div><div class="screen"><div class="eyebrow">Customer booking</div><h2>Book a car wash</h2><p class="lead">Compare services and choose an available slot.</p><div id="customerBook" class="card">Loading providers…</div></div></div>`;
   const root = document.getElementById('customerBook');
@@ -855,6 +886,7 @@ function wireNav() {
 
 // ── Router ───────────────────────────────────────────────────────────
 const routes = {
+  '#/': pageCustomerLanding,
   '#/book': pageCustomerBook,
   '#/staff/login': pageStaffLogin,
   '#/staff/board': pageStaffBoard,
@@ -867,7 +899,7 @@ function router() {
   clearTimeout(boardRefreshTimer);
   boardRealtimeCleanup?.();
   boardRealtimeCleanup = null;
-  const hash = location.hash || '#/staff/board';
+  const hash = location.hash || '#/';
   (routes[hash] ?? pageStaffBoard)();
 }
 window.addEventListener('hashchange', router);
