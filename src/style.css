@@ -261,8 +261,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .availability-service small{color:#71817C;}
 .availability-slots{gap:6px;}
 .slot-chip{border:1px solid #D56E45;background:#FFF8F0;color:#B7512E;border-radius:8px;min-height:38px;padding:8px 10px;font-weight:700;}
-.customer-manage{max-width:900px;margin:25px auto 0;background:#E9EEE8;border-color:#D2DDD5;}
-.customer-manage h3{font-size:20px;}
+.customer-manage{max-width:900px;margin:30px auto 0;padding:24px 0 0;background:transparent;border:0;border-top:1px solid #D2DDD5;border-radius:0;}
+.customer-manage h3{font-size:20px;margin:0;}
+.customer-manage .lead{max-width:54ch;}
+.customer-manage .field input{background:#FCFCF8;}
+.availability-search>*{min-width:0;}
+.availability-search input,.availability-search select{box-sizing:border-box;max-width:100%;min-width:0;}
+.customer-book-screen,.customer-book-shell{min-width:0;overflow-x:clip;}
 
 @media (max-width:700px){
   .customer-book-screen{padding-top:22px;}
@@ -270,6 +275,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .customer-book-heading .lead{max-width:31ch;}
   .availability-search{grid-template-columns:1fr 1fr;padding:12px;}
   .availability-search .availability-mode,.availability-search .provider-filter-field,.availability-search .btn{grid-column:1/-1;}
+  .availability-search .field{min-width:0;}
   .availability-search .field input,.availability-search .field select{min-height:44px;padding:9px 10px;font-size:13px;}
   .availability-search .btn{margin-top:10px;}
   .provider-card{padding:12px;}
