@@ -39,7 +39,7 @@ function shell(navActive, innerHTML) {
   const isOwner = ['owner', 'platform_owner'].includes(state.staff?.role);
   const canEditRules = ['owner', 'platform_owner', 'manager'].includes(state.staff?.role);
   const canManage = ['owner', 'platform_owner', 'manager'].includes(state.staff?.role);
-  const moreActive = ['overview', 'analytics', 'settings', 'platform-admin'].includes(navActive);
+  const moreActive = ['overview', 'analytics', 'settings', 'platform-admin', 'platform-checkout'].includes(navActive);
   const tenant = api.getActiveTenant();
   const locations = state.tenants.locations || [];
   const currentLocation = locations.find(item => item.id === tenant.locationId);
@@ -634,11 +634,12 @@ async function pagePlatformAdmin() {
       const locations = data.locations.filter(item => item.provider_id === provider.id && item.is_active !== false).length;
       const staffCount = data.staff.filter(item => item.provider_id === provider.id && item.is_active !== false).length;
       const planOptions = data.plans.map(plan => `<option value="${h(plan.id)}" ${subscription.plan_id === plan.id ? 'selected' : ''}>${h(plan.name)} · RM ${Number(plan.monthly_price_myr).toFixed(2)}</option>`).join('');
-      return `<article class="platform-provider-card"><div class="platform-provider-head"><div><strong>${h(provider.name)}</strong><span>${h(provider.id)}</span></div><span class="history-status ${subscription.status === 'past_due' || setup.status === 'blocked' ? 'status-alert' : ''}">${h(subscription.status || setup.status || provider.status || 'not started')}</span></div><dl class="platform-provider-meta"><div><dt>Locations</dt><dd>${locations}</dd></div><div><dt>Staff</dt><dd>${staffCount}</dd></div><div><dt>Onboarding</dt><dd>${h(setup.status || 'Not started')}</dd></div><div><dt>Plan</dt><dd>${h(planNames[subscription.plan_id] || 'Not assigned')}</dd></div></dl><div class="platform-provider-actions"><label>Plan<select data-provider-plan="${h(provider.id)}"><option value="">No plan</option>${planOptions}</select></label><label>Status<select data-provider-status="${h(provider.id)}"><option value="trialing" ${subscription.status === 'trialing' ? 'selected' : ''}>Trialing</option><option value="active" ${subscription.status === 'active' ? 'selected' : ''}>Active</option><option value="past_due" ${subscription.status === 'past_due' ? 'selected' : ''}>Past due</option><option value="paused" ${subscription.status === 'paused' ? 'selected' : ''}>Paused</option><option value="suspended" ${subscription.status === 'suspended' ? 'selected' : ''}>Suspended</option><option value="cancelled" ${subscription.status === 'cancelled' ? 'selected' : ''}>Cancelled</option></select></label><button class="btn compact-btn" type="button" data-save-provider="${h(provider.id)}">Save subscription</button></div></article>`;
+      const nextBilling = subscription.next_billing_at ? `Next billing ${h(new Date(subscription.next_billing_at).toLocaleDateString('en-MY'))}` : 'No billing date yet';
+      return `<article class="platform-provider-card"><div class="platform-provider-head"><div><strong>${h(provider.name)}</strong><span>${h(provider.id)}</span></div><span class="history-status ${subscription.status === 'past_due' || subscription.status === 'incomplete' || setup.status === 'blocked' ? 'status-alert' : ''}">${h(subscription.status || setup.status || provider.status || 'not started')}</span></div><dl class="platform-provider-meta"><div><dt>Locations</dt><dd>${locations}</dd></div><div><dt>Staff</dt><dd>${staffCount}</dd></div><div><dt>Onboarding</dt><dd>${h(setup.status || 'Not started')}</dd></div><div><dt>Plan</dt><dd>${h(planNames[subscription.plan_id] || 'Not assigned')}</dd></div></dl><div class="platform-provider-billing"><span>${h(subscription.payment_provider === 'mock' ? 'Test payment' : 'Payment not connected')}</span><span>${nextBilling}</span></div><div class="platform-provider-actions"><label>Choose plan<select data-provider-plan="${h(provider.id)}"><option value="">Select a plan</option>${planOptions}</select></label><button class="btn compact-btn" type="button" data-open-mock-checkout="${h(provider.id)}">Open mock checkout</button></div></article>`;
     }).join('') || '<p class="muted">No providers onboarded yet.</p>';
     const planCards = data.plans.map(plan => `<article class="platform-plan-card"><div><strong>${h(plan.name)}</strong><span>${h(plan.description || 'No description')}</span></div><label>Name<input data-plan-name="${h(plan.id)}" value="${h(plan.name)}"></label><label>Monthly RM<input type="number" min="0" step="0.01" data-plan-price="${h(plan.id)}" value="${Number(plan.monthly_price_myr).toFixed(2)}"></label><label>Locations<input type="number" min="1" data-plan-locations="${h(plan.id)}" value="${plan.max_locations ?? ''}"></label><label>Staff<input type="number" min="1" data-plan-staff="${h(plan.id)}" value="${plan.max_staff ?? ''}"></label><button class="btn compact-btn" type="button" data-save-plan="${h(plan.id)}">Save plan</button></article>`).join('');
-    app.innerHTML = shell('platform-admin', `<header class="overview-head"><div><div class="eyebrow">Docket platform</div><h2>Providers & subscriptions</h2><p class="lead">Monitor and manage every car-wash business from one place.</p></div><span class="overview-date">Platform admin</span></header><section class="overview-metrics"><article><span>Providers</span><strong>${data.providers.length}</strong><small>${activeProviders} active</small></article><article><span>Live subscriptions</span><strong>${liveSubscriptions}</strong><small>trialing or active</small></article><article><span>Locations</span><strong>${data.locations.filter(item => item.is_active !== false).length}</strong><small>active outlets</small></article><article><span>Attention</span><strong class="${attention.length ? 'metric-alert' : ''}">${attention.length}</strong><small>past due, blocked or paused</small></article></section><section class="overview-panel platform-provider-list"><div class="section-heading"><div><h3>Provider accounts</h3><p>Assign a plan or change subscription status.</p></div><span class="section-count">${data.providers.length}</span></div>${rows}</section><section class="overview-panel platform-plan-list"><div class="section-heading"><div><h3>Manage plans</h3><p>Edit pricing and account limits. Stripe billing is not connected yet.</p></div><span class="section-count">${data.plans.length}</span></div>${planCards}<div class="platform-new-plan"><input id="newPlanId" placeholder="plan-id"><input id="newPlanName" placeholder="Plan name"><input id="newPlanPrice" type="number" min="0" step="0.01" placeholder="Monthly RM"><button class="btn compact-btn" type="button" id="addPlan">Add plan</button></div></section>`);
-    document.querySelectorAll('[data-save-provider]').forEach(button => button.onclick = async () => { button.disabled = true; try { await api.saveProviderSubscription({ providerId: button.dataset.saveProvider, planId: document.querySelector(`[data-provider-plan="${button.dataset.saveProvider}"]`).value || null, status: document.querySelector(`[data-provider-status="${button.dataset.saveProvider}"]`).value }); await pagePlatformAdmin(); } catch (error) { button.disabled = false; alert(error?.message || 'Could not save subscription.'); } });
+    app.innerHTML = shell('platform-admin', `<header class="overview-head"><div><div class="eyebrow">Docket platform</div><h2>Providers & subscriptions</h2><p class="lead">Payments update these statuses automatically. Use mock checkout to test the lifecycle.</p></div><span class="overview-date">Platform admin</span></header><section class="overview-metrics"><article><span>Providers</span><strong>${data.providers.length}</strong><small>${activeProviders} active</small></article><article><span>Live subscriptions</span><strong>${liveSubscriptions}</strong><small>trialing or active</small></article><article><span>Locations</span><strong>${data.locations.filter(item => item.is_active !== false).length}</strong><small>active outlets</small></article><article><span>Attention</span><strong class="${attention.length ? 'metric-alert' : ''}">${attention.length}</strong><small>past due, blocked or paused</small></article></section><section class="overview-panel platform-provider-list"><div class="section-heading"><div><h3>Provider accounts</h3><p>Choose a plan, then test payment. No real money is moved.</p></div><span class="section-count">${data.providers.length}</span></div>${rows}</section><section class="overview-panel platform-plan-list"><div class="section-heading"><div><h3>Manage plans</h3><p>Edit pricing and account limits. These are catalogue settings, not payment status.</p></div><span class="section-count">${data.plans.length}</span></div>${planCards}<div class="platform-new-plan"><input id="newPlanId" placeholder="plan-id"><input id="newPlanName" placeholder="Plan name"><input id="newPlanPrice" type="number" min="0" step="0.01" placeholder="Monthly RM"><button class="btn compact-btn" type="button" id="addPlan">Add plan</button></div></section>`);
+    document.querySelectorAll('[data-open-mock-checkout]').forEach(button => button.onclick = () => { const planId = document.querySelector(`[data-provider-plan="${button.dataset.openMockCheckout}"]`).value; if (!planId) return alert('Choose a plan first.'); location.hash = `#/staff/platform-checkout?provider=${encodeURIComponent(button.dataset.openMockCheckout)}&plan=${encodeURIComponent(planId)}`; });
     document.querySelectorAll('[data-save-plan]').forEach(button => button.onclick = async () => { button.disabled = true; const id = button.dataset.savePlan; try { await api.saveSubscriptionPlan({ id, name: document.querySelector(`[data-plan-name="${id}"]`).value, monthlyPriceMyr: document.querySelector(`[data-plan-price="${id}"]`).value, maxLocations: document.querySelector(`[data-plan-locations="${id}"]`).value, maxStaff: document.querySelector(`[data-plan-staff="${id}"]`).value }); await pagePlatformAdmin(); } catch (error) { button.disabled = false; alert(error?.message || 'Could not save plan.'); } });
     document.getElementById('addPlan').onclick = async () => { const button = document.getElementById('addPlan'); button.disabled = true; try { await api.saveSubscriptionPlan({ id: document.getElementById('newPlanId').value, name: document.getElementById('newPlanName').value, monthlyPriceMyr: document.getElementById('newPlanPrice').value }); await pagePlatformAdmin(); } catch (error) { button.disabled = false; alert(error?.message || 'Could not add plan.'); } };
     wireNav();
@@ -647,6 +648,34 @@ async function pagePlatformAdmin() {
     app.innerHTML = shell('platform-admin', `<div class="eyebrow">Docket platform</div><h2>Could not load platform data</h2><p class="lead" style="color:#b3261e">${h(error?.message || 'Unknown error')}</p><button class="btn" id="retryPlatformAdmin">Try again</button>`);
     wireNav();
     document.getElementById('retryPlatformAdmin').onclick = pagePlatformAdmin;
+  }
+}
+
+async function pagePlatformCheckout() {
+  const myGen = ++renderGen;
+  const staff = await requireStaff(myGen);
+  if (!staff) return;
+  if (staff.role !== 'platform_owner') {
+    app.innerHTML = shell('platform-checkout', '<div class="eyebrow">Docket platform</div><h2>Platform admin access only</h2><p class="lead">This test checkout is for Docket operators.</p>');
+    wireNav();
+    return;
+  }
+  const params = new URLSearchParams((location.hash.split('?')[1] || ''));
+  try {
+    const data = await api.getPlatformAdminData();
+    const provider = data.providers.find(item => item.id === params.get('provider'));
+    const plan = data.plans.find(item => item.id === params.get('plan'));
+    if (!provider || !plan) throw new Error('Provider or plan could not be found.');
+    app.innerHTML = shell('platform-checkout', `<div class="platform-checkout"><div class="eyebrow">Test payment</div><h2>Start ${h(plan.name)} for ${h(provider.name)}</h2><p class="lead">This is a simulated checkout. It does not contact TNG, a bank or a payment gateway.</p><section class="platform-checkout-card"><div class="checkout-summary"><span>Plan</span><strong>${h(plan.name)}</strong><small>${h(plan.description || '')}</small></div><div class="checkout-summary"><span>Monthly price</span><strong>RM ${Number(plan.monthly_price_myr).toFixed(2)}</strong><small>Renews monthly from the successful payment date.</small></div><div class="checkout-summary"><span>Included limits</span><strong>${plan.max_locations ?? 'Unlimited'} locations · ${plan.max_staff ?? 'Unlimited'} staff</strong><small>${plan.max_monthly_bookings ?? 'Unlimited'} bookings per month</small></div><div class="mock-payment-badge">MOCK MODE · NO REAL CHARGE</div><div class="confirmation-actions"><button class="btn secondary" id="cancelMockCheckout" type="button">Cancel</button><button class="btn secondary" id="failMockCheckout" type="button">Simulate failed payment</button><button class="btn" id="successMockCheckout" type="button">Simulate successful payment</button></div></section></div>`);
+    document.getElementById('cancelMockCheckout').onclick = () => { location.hash = '#/staff/platform-admin'; };
+    document.getElementById('successMockCheckout').onclick = async event => { event.currentTarget.disabled = true; try { await api.simulateMockSubscription({ providerId: provider.id, planId: plan.id, outcome: 'success' }); alert('Mock payment succeeded. The subscription is now active and the next billing date was calculated.'); location.hash = '#/staff/platform-admin'; } catch (error) { event.currentTarget.disabled = false; alert(error?.message || 'Could not simulate payment.'); } };
+    document.getElementById('failMockCheckout').onclick = async event => { event.currentTarget.disabled = true; try { await api.simulateMockSubscription({ providerId: provider.id, planId: plan.id, outcome: 'failure' }); alert('Mock payment failed. The subscription is now incomplete and requires payment.'); location.hash = '#/staff/platform-admin'; } catch (error) { event.currentTarget.disabled = false; alert(error?.message || 'Could not simulate payment.'); } };
+    wireNav();
+  } catch (error) {
+    if (myGen !== renderGen) return;
+    app.innerHTML = shell('platform-checkout', `<div class="eyebrow">Test payment</div><h2>Could not load checkout</h2><p class="lead" style="color:#b3261e">${h(error?.message || 'Unknown error')}</p><button class="btn" id="backToPlatform" type="button">Back to platform admin</button>`);
+    wireNav();
+    document.getElementById('backToPlatform').onclick = () => { location.hash = '#/staff/platform-admin'; };
   }
 }
 
@@ -1046,6 +1075,7 @@ const routes = {
   '#/staff/analytics': pageStaffAnalytics,
   '#/staff/history': pageStaffHistory,
   '#/staff/platform-admin': pagePlatformAdmin,
+  '#/staff/platform-checkout': pagePlatformCheckout,
   '#/staff/settings': pageStaffSettings,
   '#/staff/organization': pageStaffOrganization,
 };
@@ -1055,7 +1085,7 @@ function router() {
   boardRealtimeCleanup?.();
   boardRealtimeCleanup = null;
   const hash = location.hash || '#/';
-  (routes[hash] ?? pageStaffBoard)();
+  (routes[hash.split('?')[0]] ?? pageStaffBoard)();
 }
 window.addEventListener('hashchange', router);
 router();

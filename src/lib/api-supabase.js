@@ -5,6 +5,7 @@ export const DEFAULT_LOCATION_ID = 'washpoint-main';
 
 const MOCK_SETTINGS = { min_lead_minutes: 60, max_advance_days: 14, buffer_minutes: 15, weekday_open: '08:00', weekday_close: '19:00', weekend_open: '08:00', weekend_close: '21:00' };
 const TENANT_STORAGE_KEY = 'docket.activeTenant';
+const MOCK_BILLING_STORAGE_KEY = 'docket.mockBilling';
 let activeTenant = loadTenant();
 
 function loadTenant() { try { return JSON.parse(localStorage.getItem(TENANT_STORAGE_KEY)) || { providerId: DEFAULT_PROVIDER_ID, locationId: DEFAULT_LOCATION_ID }; } catch { return { providerId: DEFAULT_PROVIDER_ID, locationId: DEFAULT_LOCATION_ID }; } }
@@ -16,6 +17,8 @@ function overlaps(startA, endA, startB, endB) { return startA < endB && startB <
 function minutes(value) { const [hours, mins] = String(value).slice(0, 5).split(':').map(Number); return hours * 60 + mins; }
 function localDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function isBookable(dateISO, settings) { const today = localDate(); const start = new Date(`${today}T00:00:00+08:00`); const date = new Date(`${dateISO}T00:00:00+08:00`); const days = Math.round((date - start) / 86400000); return days >= 0 && days <= Number(settings.max_advance_days || 14); }
+function readMockBilling() { try { return JSON.parse(localStorage.getItem(MOCK_BILLING_STORAGE_KEY)) || { subscriptions: {}, events: [] }; } catch { return { subscriptions: {}, events: [] }; } }
+function writeMockBilling(value) { localStorage.setItem(MOCK_BILLING_STORAGE_KEY, JSON.stringify(value)); return value; }
 async function rows(table, columns = '*') { const db = ensureSupabase(); const { data, error } = await db.from(table).select(columns).eq('provider_id', activeTenant.providerId).eq('location_id', activeTenant.locationId); errorOrThrow(error, `loading ${table}`); return data || []; }
 
 export const isSupabaseMode = true;
@@ -51,7 +54,27 @@ export async function getPlatformAdminData() {
   errorOrThrow(subscriptionError, 'loading provider subscriptions');
   errorOrThrow(onboardingError, 'loading provider onboarding');
   errorOrThrow(planError, 'loading subscription plans');
-  return { providers: providers || [], locations: locations || [], staff: staff || [], subscriptions: subscriptions || [], onboarding: onboarding || [], plans: plans || [] };
+  const mockBilling = readMockBilling();
+  const mockedProviderIds = new Set(Object.keys(mockBilling.subscriptions));
+  const mergedSubscriptions = [...(subscriptions || []).filter(item => !mockedProviderIds.has(item.provider_id)), ...Object.values(mockBilling.subscriptions)];
+  return { providers: providers || [], locations: locations || [], staff: staff || [], subscriptions: mergedSubscriptions, onboarding: onboarding || [], plans: plans || [], billingEvents: mockBilling.events || [] };
+}
+
+export async function simulateMockSubscription({ providerId, planId, outcome = 'success' }) {
+  const db = ensureSupabase();
+  const { data: plan, error: planError } = await db.from('subscription_plans').select('*').eq('id', planId).single();
+  errorOrThrow(planError, 'loading mock billing plan');
+  const now = new Date();
+  const periodEnd = new Date(now); periodEnd.setMonth(periodEnd.getMonth() + 1);
+  const checkoutId = `mock_cs_${Date.now().toString(36)}`;
+  const state = readMockBilling();
+  const status = outcome === 'success' ? 'active' : outcome === 'failure' ? 'incomplete' : 'cancelled';
+  const subscription = { provider_id: providerId, plan_id: plan.id, status, payment_provider: 'mock', checkout_id: checkoutId, billing_interval: 'month', started_at: now.toISOString(), current_period_start: outcome === 'success' ? now.toISOString() : null, current_period_end: outcome === 'success' ? periodEnd.toISOString() : null, next_billing_at: outcome === 'success' ? periodEnd.toISOString() : null, cancel_at_period_end: false, last_payment_at: outcome === 'success' ? now.toISOString() : null, last_payment_status: outcome === 'success' ? 'paid' : 'failed', updated_at: now.toISOString() };
+  const event = { idempotency_key: checkoutId, provider_id: providerId, plan_id: plan.id, payment_provider: 'mock', event_type: outcome === 'success' ? 'invoice.paid' : outcome === 'failure' ? 'invoice.payment_failed' : 'checkout.canceled', amount_myr: Number(plan.monthly_price_myr || 0), currency: 'myr', status, occurred_at: now.toISOString() };
+  if (outcome === 'cancelled') delete state.subscriptions[providerId]; else state.subscriptions[providerId] = subscription;
+  state.events = [event, ...(state.events || [])].filter((item, index, items) => items.findIndex(candidate => candidate.idempotency_key === item.idempotency_key) === index).slice(0, 50);
+  writeMockBilling(state);
+  return { subscription, event };
 }
 
 export async function saveSubscriptionPlan({ id, name, description = '', monthlyPriceMyr, maxLocations, maxStaff, maxMonthlyBookings, isActive = true }) {

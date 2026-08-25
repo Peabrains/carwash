@@ -192,12 +192,20 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .platform-provider-actions label,.platform-plan-card label{display:grid;gap:4px;color:#71817C;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
 .platform-provider-actions select,.platform-plan-card input,.platform-new-plan input{min-width:0;padding:9px;border:1px solid #D8E1DA;border-radius:9px;background:#F4F6F0;color:var(--ink);font:600 12px inherit;}
 .compact-btn{width:auto;min-height:38px;padding:9px 13px;white-space:nowrap;}
+.platform-provider-billing{display:flex;justify-content:space-between;gap:10px;margin-top:10px;color:var(--ink-soft);font-size:10px;}
 .platform-plan-list{margin-top:16px;}
 .platform-plan-card{display:grid;grid-template-columns:minmax(140px,1.5fr) repeat(4,minmax(70px,.7fr)) auto;gap:9px;align-items:end;padding:13px 0;border-top:1px solid #E8ECE8;}
 .platform-plan-card>div{display:grid;gap:3px;align-self:center;min-width:0;}
 .platform-plan-card>div strong{font-size:13px;}
 .platform-plan-card>div span{color:var(--ink-soft);font-size:10px;overflow-wrap:anywhere;}
 .platform-new-plan{display:grid;grid-template-columns:1fr 1.3fr .8fr auto;gap:9px;margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);}
+.platform-checkout{max-width:680px;margin:0 auto;}
+.platform-checkout-card{display:grid;gap:15px;margin-top:18px;padding:20px;border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:0 8px 24px rgba(23,54,59,.07);}
+.checkout-summary{display:grid;gap:4px;padding-bottom:13px;border-bottom:1px solid #E8ECE8;}
+.checkout-summary span{color:#71817C;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
+.checkout-summary strong{font-size:18px;}
+.checkout-summary small{color:var(--ink-soft);font-size:11px;}
+.mock-payment-badge{padding:10px;border:1px dashed #C8D7C9;border-radius:9px;background:#F0F8F1;color:#26745E;font-size:10px;font-weight:800;letter-spacing:.06em;text-align:center;}
 .analytics-row span{color:var(--ink-soft);font-size:11px;}
 .customer-manage{margin-bottom:18px;background:var(--paper);}
 .customer-manage h3{margin-top:0;}
@@ -540,6 +548,7 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
   .overview-attention-row,.overview-bay-row,.overview-booking-row{align-items:flex-start;}
   .platform-provider-actions,.platform-plan-card,.platform-new-plan{grid-template-columns:1fr 1fr;}
   .platform-provider-actions .compact-btn,.platform-plan-card .compact-btn,.platform-new-plan .compact-btn{grid-column:1/-1;}
+  .platform-provider-billing{align-items:flex-start;flex-direction:column;gap:3px;}
   .analytics-filter{margin-top:12px;}
   .analytics-filter select{width:100%;}
   .analytics-summary{grid-template-columns:1fr;gap:8px;}
