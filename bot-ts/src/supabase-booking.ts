@@ -187,14 +187,13 @@ export async function managePublicBooking({ reference, phone, action, dateIso, t
     return publicBookingDetails(updated);
   }
   if (!dateIso || !time || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso) || !/^\d{2}:\d{2}$/.test(time)) throw new Error("Choose a valid new date and time.");
-  const context = await loadSupabaseBookingContext({ providerId: appointment.provider_id, locationId: appointment.location_id });
-  const service = context.services.find(item => item.id === appointment.service_id);
-  if (!service || !(await availableSupabaseSlots(context, { providerId: appointment.provider_id, locationId: appointment.location_id }, dateIso, service, time, appointment.id)).includes(time)) throw new Error("That time is no longer available.");
-  const bay = await choosePublicBay(context, { providerId: appointment.provider_id, locationId: appointment.location_id }, appointment, dateIso, time);
-  if (!bay) throw new Error("That time is no longer available.");
-  const scheduledAt = new Date(`${dateIso}T${time}:00+08:00`).toISOString();
-  const { data: updated, error } = await db.from("appointments").update({ scheduled_date: dateIso, scheduled_at: scheduledAt, bay_id: bay.id, updated_at: new Date().toISOString() }).eq("id", appointment.id).select().single();
+  const { data: moved, error } = await db.rpc("reschedule_appointment_atomic", { p_appointment_id: appointment.id, p_scheduled_date: dateIso, p_time: time, p_bay_id: null });
   fail(error, "rescheduling booking");
+  const moveResult = Array.isArray(moved) ? moved[0] : moved;
+  if (!moveResult) throw new Error("That time is no longer available.");
+  const scheduledAt = moveResult.result_scheduled_at;
+  const { data: updated, error: reloadError } = await db.from("appointments").select("*").eq("id", appointment.id).single();
+  fail(reloadError, "loading rescheduled booking");
   const { error: eventError } = await db.from("booking_events").insert({ provider_id: appointment.provider_id, location_id: appointment.location_id, appointment_id: appointment.id, reference: appointment.reference, event_type: "rescheduled", description: "Customer rescheduled the booking online", old_value: { scheduled_date: appointment.scheduled_date, scheduled_at: appointment.scheduled_at }, new_value: { scheduled_date: dateIso, scheduled_at: scheduledAt } });
   fail(eventError, "recording booking reschedule");
   return publicBookingDetails(updated);
