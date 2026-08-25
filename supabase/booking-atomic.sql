@@ -5,6 +5,9 @@
 -- serializes reservations for one provider/location/day, preventing two
 -- concurrent requests from selecting the same bay from the same snapshot.
 
+alter table public.appointments drop constraint if exists appointments_channel_check;
+alter table public.appointments add constraint appointments_channel_check check (channel in ('telegram', 'whatsapp', 'web', 'staff'));
+
 create or replace function public.reserve_appointment_atomic(
   p_provider_id text,
   p_location_id text,
