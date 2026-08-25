@@ -102,7 +102,7 @@ export async function availableSupabaseSlots(context: BookingContext, tenant: Te
   });
 }
 
-export async function reserveSupabaseAppointment(threadId: string, state: Tier1State, tenant: Tenant): Promise<{ status: "created" | "existing"; reference: string; service: Service } | { status: "unavailable"; reference: string }> {
+export async function reserveSupabaseAppointment(threadId: string, state: Tier1State, tenant: Tenant, channel: "telegram" | "web" = "telegram"): Promise<{ status: "created" | "existing"; reference: string; service: Service } | { status: "unavailable"; reference: string }> {
   if (!state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone) return { status: "unavailable", reference: "" };
   const db = client();
   const requestId = state.bookingRequestId || createHash("sha256").update([tenant.providerId, tenant.locationId, threadId, state.serviceId, state.dateIso, state.time24h].join("|")).digest("hex").slice(0, 32);
@@ -114,7 +114,7 @@ export async function reserveSupabaseAppointment(threadId: string, state: Tier1S
     p_customer_chat_id: threadId,
     p_customer_name: state.customerName,
     p_customer_phone: state.customerPhone,
-    p_channel: "telegram",
+    p_channel: channel,
     p_service_id: state.serviceId,
     p_scheduled_date: state.dateIso,
     p_time: state.time24h,

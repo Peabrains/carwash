@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const name = body.name?.trim() || "";
     const phone = body.phone?.replace(/[\s-]/g, "") || "";
     if (!/^[a-z0-9-]+$/.test(providerId) || !/^[a-z0-9-]+$/.test(locationId) || !/^[a-f0-9-]{20,}$/.test(serviceId) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time) || !name || !/^(?:01\d{8,9}|\+?601\d{8,9})$/.test(phone)) return json({ error: "Please provide valid booking details." }, 400);
-    const result = await reserveSupabaseAppointment(`web:${randomUUID()}`, { step: "confirm", bookingRequestId: randomUUID(), serviceId, dateIso: date, time24h: time, customerName: name, customerPhone: phone }, { providerId, locationId });
+    const result = await reserveSupabaseAppointment(`web:${randomUUID()}`, { step: "confirm", bookingRequestId: randomUUID(), serviceId, dateIso: date, time24h: time, customerName: name, customerPhone: phone }, { providerId, locationId }, "web");
     if (result.status === "unavailable") return json({ error: "That slot is no longer available." }, 409);
     return json({ reference: result.reference, service: result.service }, result.status === "created" ? 201 : 200);
   } catch (error) {
