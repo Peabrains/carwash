@@ -561,7 +561,8 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
   .hours-row>strong{grid-column:1/-1;font-size:12px;}
   .hours-control{display:grid;gap:4px;}
   .hours-control>span{position:static;width:auto;height:auto;margin:0;overflow:visible;clip:auto;white-space:normal;color:#71817C;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
-  .hours-row input{height:42px;padding:8px;font-size:12px;}
+  /* Time inputs stay tap-friendly without becoming oversized cards on phones. */
+  .hours-row input{box-sizing:border-box;height:38px;min-height:38px;padding:6px 9px;font-size:13px;line-height:1.2;}
   .break-list{grid-template-columns:1fr;}
   .manage-summary{justify-content:flex-start;margin-top:14px;}
   .settings-row{align-items:flex-start;}
