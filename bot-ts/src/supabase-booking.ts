@@ -107,38 +107,30 @@ export async function reserveSupabaseAppointment(threadId: string, state: Tier1S
   const db = client();
   const requestId = state.bookingRequestId || createHash("sha256").update([tenant.providerId, tenant.locationId, threadId, state.serviceId, state.dateIso, state.time24h].join("|")).digest("hex").slice(0, 32);
   const reference = `WP-T1-${state.dateIso.replaceAll("-", "")}-${requestId.slice(0, 6).toUpperCase()}`;
-  const { data: existing, error: existingError } = await db.from("appointments").select("reference,service_id,status").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId).eq("booking_request_id", requestId).maybeSingle();
-  fail(existingError, "checking an existing booking");
-  if (existing) {
-    const { data: service, error } = await db.from("services").select("id,name,duration_minutes,price_myr,provider_id,location_id").eq("id", existing.service_id).single();
-    fail(error, "loading the existing service");
-    return { status: "existing", reference: String(existing.reference || reference), service: service as Service };
-  }
-  const context = await loadSupabaseBookingContext(tenant);
-  const service = context.services.find(item => item.id === state.serviceId);
-  if (!service || !(await availableSupabaseSlots(context, tenant, state.dateIso, service, state.time24h)).includes(state.time24h)) return { status: "unavailable", reference };
-  const [baysResult, bookingsResult, breaksResult, closuresResult] = await Promise.all([
-    db.from("bays").select("id,is_active,status").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId),
-    db.from("appointments").select("bay_id,scheduled_at,duration_minutes,status").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId).eq("scheduled_date", state.dateIso).neq("status", "cancelled"),
-    db.from("crew_break_schedule").select("bay_id,start_time,duration_minutes").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId),
-    db.from("bay_closures").select("bay_id,starts_at,ends_at").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId),
-  ]);
-  fail(baysResult.error, "loading bays for confirmation"); fail(bookingsResult.error, "loading bookings for confirmation"); fail(breaksResult.error, "loading breaks for confirmation"); fail(closuresResult.error, "loading closures for confirmation");
-  const start = new Date(`${state.dateIso}T${state.time24h}:00+08:00`).getTime(); const end = start + service.duration_minutes * 60000;
-  const bay = (baysResult.data || []).filter(row => row.is_active !== false && (!row.status || row.status === "open")).find(row => {
-    const bookingBusy = (bookingsResult.data || []).some(item => item.bay_id === row.id && bookingIntervalsOverlap(start, end, asMillis(item.scheduled_at), asMillis(item.scheduled_at) + Number(item.duration_minutes) * 60000, context.settings.buffer_minutes));
-    const breakBusy = (breaksResult.data || []).some(item => item.bay_id === row.id && intervalsOverlap(start, end, new Date(`${state.dateIso}T${String(item.start_time).slice(0, 5)}:00+08:00`).getTime(), new Date(`${state.dateIso}T${String(item.start_time).slice(0, 5)}:00+08:00`).getTime() + Number(item.duration_minutes) * 60000));
-    const closureBusy = (closuresResult.data || []).some(item => item.bay_id === row.id && intervalsOverlap(start, end, asMillis(item.starts_at), asMillis(item.ends_at)));
-    return !bookingBusy && !breakBusy && !closureBusy;
+  const { data, error } = await db.rpc("reserve_appointment_atomic", {
+    p_provider_id: tenant.providerId,
+    p_location_id: tenant.locationId,
+    p_booking_request_id: requestId,
+    p_customer_chat_id: threadId,
+    p_customer_name: state.customerName,
+    p_customer_phone: state.customerPhone,
+    p_channel: "telegram",
+    p_service_id: state.serviceId,
+    p_scheduled_date: state.dateIso,
+    p_time: state.time24h,
+    p_reference: reference,
   });
-  if (!bay) return { status: "unavailable", reference };
-  const { error: insertError } = await db.from("appointments").insert({ provider_id: tenant.providerId, location_id: tenant.locationId, booking_request_id: requestId, customer_chat_id: threadId, customer_name: state.customerName, customer_phone: state.customerPhone, channel: "telegram", bay_id: bay.id, service_id: service.id, scheduled_at: new Date(start).toISOString(), scheduled_date: state.dateIso, duration_minutes: service.duration_minutes, price_myr: service.price_myr, status: "confirmed", reference });
-  if (insertError) {
-    const duplicate = await db.from("appointments").select("reference").eq("provider_id", tenant.providerId).eq("location_id", tenant.locationId).eq("booking_request_id", requestId).maybeSingle();
-    if (!duplicate.error && duplicate.data) return { status: "existing", reference: String(duplicate.data.reference || reference), service };
-    throw new Error(`Supabase booking insert failed: ${insertError.message}`);
-  }
-  return { status: "created", reference, service };
+  fail(error, "reserving an appointment atomically");
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || row.result_status === "unavailable") return { status: "unavailable", reference };
+  if (!row.result_service_id || !row.result_service_name) throw new Error("Supabase atomic booking returned an incomplete service");
+  const service: Service = {
+    id: String(row.result_service_id),
+    name: String(row.result_service_name),
+    duration_minutes: Number(row.result_duration_minutes),
+    price_myr: Number(row.result_price_myr),
+  };
+  return { status: row.result_status === "existing" ? "existing" : "created", reference: String(row.appointment_reference || reference), service };
 }
 
 function normalizePhone(value: string) { return value.replace(/[\s-]/g, "").replace(/^\+/, ""); }
