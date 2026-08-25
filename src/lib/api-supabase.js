@@ -37,19 +37,38 @@ export async function getAccessibleTenants() {
 
 export async function getPlatformAdminData() {
   const db = ensureSupabase();
-  const [{ data: providers, error: providerError }, { data: locations, error: locationError }, { data: staff, error: staffError }, { data: subscriptions, error: subscriptionError }, { data: onboarding, error: onboardingError }] = await Promise.all([
+  const [{ data: providers, error: providerError }, { data: locations, error: locationError }, { data: staff, error: staffError }, { data: subscriptions, error: subscriptionError }, { data: onboarding, error: onboardingError }, { data: plans, error: planError }] = await Promise.all([
     db.from('providers').select('*').order('name'),
     db.from('locations').select('id,provider_id,name,is_active'),
     db.from('staff').select('id,provider_id,role,is_active'),
     db.from('provider_subscriptions').select('provider_id,plan_id,status,trial_ends_at,current_period_end'),
     db.from('provider_onboarding').select('*'),
+    db.from('subscription_plans').select('*').order('monthly_price_myr'),
   ]);
   errorOrThrow(providerError, 'loading platform providers');
   errorOrThrow(locationError, 'loading platform locations');
   errorOrThrow(staffError, 'loading platform staff');
   errorOrThrow(subscriptionError, 'loading provider subscriptions');
   errorOrThrow(onboardingError, 'loading provider onboarding');
-  return { providers: providers || [], locations: locations || [], staff: staff || [], subscriptions: subscriptions || [], onboarding: onboarding || [] };
+  errorOrThrow(planError, 'loading subscription plans');
+  return { providers: providers || [], locations: locations || [], staff: staff || [], subscriptions: subscriptions || [], onboarding: onboarding || [], plans: plans || [] };
+}
+
+export async function saveSubscriptionPlan({ id, name, description = '', monthlyPriceMyr, maxLocations, maxStaff, maxMonthlyBookings, isActive = true }) {
+  const db = ensureSupabase();
+  const payload = { id: id?.trim() || name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-'), name: name.trim(), description: description.trim(), monthly_price_myr: Number(monthlyPriceMyr), max_locations: maxLocations ? Number(maxLocations) : null, max_staff: maxStaff ? Number(maxStaff) : null, max_monthly_bookings: maxMonthlyBookings ? Number(maxMonthlyBookings) : null, is_active: isActive, updated_at: new Date().toISOString() };
+  const { data, error } = await db.from('subscription_plans').upsert(payload).select().single();
+  errorOrThrow(error, 'saving subscription plan');
+  return data;
+}
+
+export async function saveProviderSubscription({ providerId, planId, status = 'trialing' }) {
+  const db = ensureSupabase();
+  const now = new Date().toISOString();
+  const payload = { provider_id: providerId, plan_id: planId || null, status, updated_at: now };
+  const { data, error } = await db.from('provider_subscriptions').upsert(payload, { onConflict: 'provider_id' }).select().single();
+  errorOrThrow(error, 'saving provider subscription');
+  return data;
 }
 
 export async function createProvider({ name, description = '' }) { const db = ensureSupabase(); const id = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-'); const { data, error } = await db.from('providers').insert({ id, name: name.trim(), description: description.trim(), status: 'active' }).select().single(); errorOrThrow(error, 'creating provider'); const locationId = `${id}-main`; const { data: location, error: locationError } = await db.from('locations').insert({ id: locationId, provider_id: id, name: 'Main outlet', timezone: 'Asia/Kuala_Lumpur', is_active: true }).select().single(); errorOrThrow(locationError, 'creating provider default location'); const { error: settingsError } = await db.from('booking_settings').upsert({ id: Date.now(), provider_id: id, location_id: locationId, ...MOCK_SETTINGS }, { onConflict: 'provider_id,location_id' }); errorOrThrow(settingsError, 'creating provider booking settings'); return { ...data, default_location: location }; }

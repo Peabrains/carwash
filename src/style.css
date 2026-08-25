@@ -188,6 +188,16 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .platform-provider-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0 0;}
 .platform-provider-meta dt{color:#71817C;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
 .platform-provider-meta dd{margin:3px 0 0;color:var(--ink);font-size:11px;font-weight:700;overflow-wrap:anywhere;}
+.platform-provider-actions{display:grid;grid-template-columns:1fr 1fr auto;gap:9px;align-items:end;margin-top:13px;}
+.platform-provider-actions label,.platform-plan-card label{display:grid;gap:4px;color:#71817C;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
+.platform-provider-actions select,.platform-plan-card input,.platform-new-plan input{min-width:0;padding:9px;border:1px solid #D8E1DA;border-radius:9px;background:#F4F6F0;color:var(--ink);font:600 12px inherit;}
+.compact-btn{width:auto;min-height:38px;padding:9px 13px;white-space:nowrap;}
+.platform-plan-list{margin-top:16px;}
+.platform-plan-card{display:grid;grid-template-columns:minmax(140px,1.5fr) repeat(4,minmax(70px,.7fr)) auto;gap:9px;align-items:end;padding:13px 0;border-top:1px solid #E8ECE8;}
+.platform-plan-card>div{display:grid;gap:3px;align-self:center;min-width:0;}
+.platform-plan-card>div strong{font-size:13px;}
+.platform-plan-card>div span{color:var(--ink-soft);font-size:10px;overflow-wrap:anywhere;}
+.platform-new-plan{display:grid;grid-template-columns:1fr 1.3fr .8fr auto;gap:9px;margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);}
 .analytics-row span{color:var(--ink-soft);font-size:11px;}
 .customer-manage{margin-bottom:18px;background:var(--paper);}
 .customer-manage h3{margin-top:0;}
@@ -528,6 +538,8 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
   .overview-grid{grid-template-columns:1fr;gap:10px;}
   .overview-panel{padding:14px;}
   .overview-attention-row,.overview-bay-row,.overview-booking-row{align-items:flex-start;}
+  .platform-provider-actions,.platform-plan-card,.platform-new-plan{grid-template-columns:1fr 1fr;}
+  .platform-provider-actions .compact-btn,.platform-plan-card .compact-btn,.platform-new-plan .compact-btn{grid-column:1/-1;}
   .analytics-filter{margin-top:12px;}
   .analytics-filter select{width:100%;}
   .analytics-summary{grid-template-columns:1fr;gap:8px;}
