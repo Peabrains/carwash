@@ -39,7 +39,7 @@ function shell(navActive, innerHTML) {
   const isOwner = ['owner', 'platform_owner'].includes(state.staff?.role);
   const canEditRules = ['owner', 'platform_owner', 'manager'].includes(state.staff?.role);
   const canManage = ['owner', 'platform_owner', 'manager'].includes(state.staff?.role);
-  const moreActive = ['overview', 'analytics', 'settings'].includes(navActive);
+  const moreActive = ['overview', 'analytics', 'settings', 'platform-admin'].includes(navActive);
   const tenant = api.getActiveTenant();
   const locations = state.tenants.locations || [];
   const currentLocation = locations.find(item => item.id === tenant.locationId);
@@ -60,7 +60,7 @@ function shell(navActive, innerHTML) {
         <button type="button" class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</button>
         <button type="button" class="item ${navActive==='history'?'active':''}" data-nav="#/staff/history">Bookings</button>
         ${canManage ? `<button type="button" class="item ${navActive==='organization'?'active':''}" data-nav="#/staff/organization">Manage</button>` : ''}
-        <div class="nav-more-wrap"><button type="button" class="item ${moreActive?'active':''}" data-menu-toggle aria-expanded="false" aria-controls="navMenu">More <span aria-hidden="true">☰</span></button><div class="nav-menu" id="navMenu" hidden>${isOwner ? `<div class="nav-menu-label">Insights</div><button type="button" data-nav="#/staff/overview">Overview</button><button type="button" data-nav="#/staff/analytics">Analytics</button><div class="nav-menu-divider"></div>` : ''}${canEditRules ? '<button type="button" data-nav="#/staff/settings">Settings</button>' : ''}<button type="button" data-signout="1">Sign out</button></div></div>
+        <div class="nav-more-wrap"><button type="button" class="item ${moreActive?'active':''}" data-menu-toggle aria-expanded="false" aria-controls="navMenu">More <span aria-hidden="true">☰</span></button><div class="nav-menu" id="navMenu" hidden>${isOwner ? `<div class="nav-menu-label">Insights</div><button type="button" data-nav="#/staff/overview">Overview</button><button type="button" data-nav="#/staff/analytics">Analytics</button><div class="nav-menu-divider"></div>` : ''}${state.staff?.role === 'platform_owner' ? '<div class="nav-menu-label">Docket platform</div><button type="button" data-nav="#/staff/platform-admin">Providers & subscriptions</button><div class="nav-menu-divider"></div>' : ''}${canEditRules ? '<button type="button" data-nav="#/staff/settings">Settings</button>' : ''}<button type="button" data-signout="1">Sign out</button></div></div>
       </div>` : ''}
     </div>`;
 }
@@ -609,6 +609,42 @@ async function pageStaffHistory() {
     document.getElementById('retryHistory').onclick = pageStaffHistory;
   }
 }
+
+async function pagePlatformAdmin() {
+  const myGen = ++renderGen;
+  const staff = await requireStaff(myGen);
+  if (!staff) return;
+  if (staff.role !== 'platform_owner') {
+    app.innerHTML = shell('platform-admin', '<div class="eyebrow">Docket platform</div><h2>Platform admin access only</h2><p class="lead">This area is restricted to Docket operators.</p>');
+    wireNav();
+    return;
+  }
+  try {
+    const data = await api.getPlatformAdminData();
+    if (myGen !== renderGen) return;
+    const subscriptions = Object.fromEntries(data.subscriptions.map(item => [item.provider_id, item]));
+    const onboarding = Object.fromEntries(data.onboarding.map(item => [item.provider_id, item]));
+    const planNames = { trial: 'Trial', starter: 'Starter', growth: 'Growth' };
+    const activeProviders = data.providers.filter(item => item.status === 'active').length;
+    const liveSubscriptions = data.subscriptions.filter(item => ['trialing', 'active'].includes(item.status)).length;
+    const attention = data.providers.filter(item => ['paused', 'archived'].includes(item.status) || ['past_due', 'suspended', 'blocked'].includes(subscriptions[item.id]?.status || onboarding[item.id]?.status));
+    const rows = data.providers.map(provider => {
+      const subscription = subscriptions[provider.id] || {};
+      const setup = onboarding[provider.id] || {};
+      const locations = data.locations.filter(item => item.provider_id === provider.id && item.is_active !== false).length;
+      const staffCount = data.staff.filter(item => item.provider_id === provider.id && item.is_active !== false).length;
+      return `<article class="platform-provider-card"><div class="platform-provider-head"><div><strong>${h(provider.name)}</strong><span>${h(provider.id)}</span></div><span class="history-status ${subscription.status === 'past_due' || setup.status === 'blocked' ? 'status-alert' : ''}">${h(subscription.status || setup.status || provider.status || 'not started')}</span></div><dl class="platform-provider-meta"><div><dt>Plan</dt><dd>${h(planNames[subscription.plan_id] || subscription.plan_id || 'Not assigned')}</dd></div><div><dt>Locations</dt><dd>${locations}</dd></div><div><dt>Staff</dt><dd>${staffCount}</dd></div><div><dt>Onboarding</dt><dd>${h(setup.status || 'Not started')}</dd></div></dl></article>`;
+    }).join('') || '<p class="muted">No providers onboarded yet.</p>';
+    app.innerHTML = shell('platform-admin', `<header class="overview-head"><div><div class="eyebrow">Docket platform</div><h2>Providers & subscriptions</h2><p class="lead">Monitor every car-wash business from one place.</p></div><span class="overview-date">Platform admin</span></header><section class="overview-metrics"><article><span>Providers</span><strong>${data.providers.length}</strong><small>${activeProviders} active</small></article><article><span>Live subscriptions</span><strong>${liveSubscriptions}</strong><small>trialing or active</small></article><article><span>Locations</span><strong>${data.locations.filter(item => item.is_active !== false).length}</strong><small>active outlets</small></article><article><span>Attention</span><strong class="${attention.length ? 'metric-alert' : ''}">${attention.length}</strong><small>past due, blocked or paused</small></article></section><section class="overview-panel platform-provider-list"><div class="section-heading"><div><h3>Provider accounts</h3><p>Onboarding and billing status at a glance.</p></div><span class="section-count">${data.providers.length}</span></div>${rows}</section>`);
+    wireNav();
+  } catch (error) {
+    if (myGen !== renderGen) return;
+    app.innerHTML = shell('platform-admin', `<div class="eyebrow">Docket platform</div><h2>Could not load platform data</h2><p class="lead" style="color:#b3261e">${h(error?.message || 'Unknown error')}</p><button class="btn" id="retryPlatformAdmin">Try again</button>`);
+    wireNav();
+    document.getElementById('retryPlatformAdmin').onclick = pagePlatformAdmin;
+  }
+}
+
 async function pageStaffOverview() {
   const myGen = ++renderGen;
   const staff = await requireStaff(myGen);
@@ -1004,6 +1040,7 @@ const routes = {
   '#/staff/overview': pageStaffOverview,
   '#/staff/analytics': pageStaffAnalytics,
   '#/staff/history': pageStaffHistory,
+  '#/staff/platform-admin': pagePlatformAdmin,
   '#/staff/settings': pageStaffSettings,
   '#/staff/organization': pageStaffOrganization,
 };

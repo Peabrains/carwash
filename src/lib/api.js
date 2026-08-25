@@ -91,6 +91,7 @@ export async function getAccessibleTenants(staff) {
   if (!valid && locations[0]) setActiveTenant(locations[0].provider_id, locations[0].id);
   return { providers, locations };
 }
+export async function getPlatformAdminData() { if (useSupabase) return supabaseApi.getPlatformAdminData(); return { providers: [], locations: [], staff: [], subscriptions: [], onboarding: [] }; }
 
 export async function createProvider({ name, description = '' }) {
   if (useSupabase) return supabaseApi.createProvider({ name, description });
