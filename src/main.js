@@ -39,7 +39,7 @@ function shell(navActive, innerHTML) {
   const isOwner = ['owner', 'platform_owner'].includes(state.staff?.role);
   const canEditRules = ['owner', 'platform_owner', 'manager'].includes(state.staff?.role);
   const canManage = ['owner', 'platform_owner', 'manager'].includes(state.staff?.role);
-  const moreActive = ['overview', 'analytics', 'settings', 'platform-admin', 'platform-checkout'].includes(navActive);
+  const moreActive = ['overview', 'analytics', 'billing', 'settings', 'platform-admin', 'platform-checkout'].includes(navActive);
   const tenant = api.getActiveTenant();
   const locations = state.tenants.locations || [];
   const currentLocation = locations.find(item => item.id === tenant.locationId);
@@ -60,7 +60,7 @@ function shell(navActive, innerHTML) {
         <button type="button" class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</button>
         <button type="button" class="item ${navActive==='history'?'active':''}" data-nav="#/staff/history">Bookings</button>
         ${canManage ? `<button type="button" class="item ${navActive==='organization'?'active':''}" data-nav="#/staff/organization">Manage</button>` : ''}
-        <div class="nav-more-wrap"><button type="button" class="item ${moreActive?'active':''}" data-menu-toggle aria-expanded="false" aria-controls="navMenu">More <span aria-hidden="true">☰</span></button><div class="nav-menu" id="navMenu" hidden>${isOwner ? `<div class="nav-menu-label">Insights</div><button type="button" data-nav="#/staff/overview">Overview</button><button type="button" data-nav="#/staff/analytics">Analytics</button><div class="nav-menu-divider"></div>` : ''}${state.staff?.role === 'platform_owner' ? '<div class="nav-menu-label">Docket platform</div><button type="button" data-nav="#/staff/platform-admin">Providers & subscriptions</button><div class="nav-menu-divider"></div>' : ''}${canEditRules ? '<button type="button" data-nav="#/staff/settings">Settings</button>' : ''}<button type="button" data-signout="1">Sign out</button></div></div>
+        <div class="nav-more-wrap"><button type="button" class="item ${moreActive?'active':''}" data-menu-toggle aria-expanded="false" aria-controls="navMenu">More <span aria-hidden="true">☰</span></button><div class="nav-menu" id="navMenu" hidden>${isOwner ? `<div class="nav-menu-label">Insights</div><button type="button" data-nav="#/staff/overview">Overview</button><button type="button" data-nav="#/staff/analytics">Analytics</button><div class="nav-menu-divider"></div><div class="nav-menu-label">Account</div><button type="button" data-nav="#/staff/billing">Billing & subscription</button><div class="nav-menu-divider"></div>` : ''}${state.staff?.role === 'platform_owner' ? '<div class="nav-menu-label">Docket platform</div><button type="button" data-nav="#/staff/platform-admin">Providers & subscriptions</button><div class="nav-menu-divider"></div>' : ''}${canEditRules ? '<button type="button" data-nav="#/staff/settings">Settings</button>' : ''}<button type="button" data-signout="1">Sign out</button></div></div>
       </div>` : ''}
     </div>`;
 }
@@ -655,15 +655,18 @@ async function pagePlatformCheckout() {
   const myGen = ++renderGen;
   const staff = await requireStaff(myGen);
   if (!staff) return;
-  if (staff.role !== 'platform_owner') {
+  const isPlatformOwner = staff.role === 'platform_owner';
+  const isProviderOwner = staff.role === 'owner';
+  if (!isPlatformOwner && !isProviderOwner) {
     app.innerHTML = shell('platform-checkout', '<div class="eyebrow">Docket platform</div><h2>Platform admin access only</h2><p class="lead">This test checkout is for Docket operators.</p>');
     wireNav();
     return;
   }
   const params = new URLSearchParams((location.hash.split('?')[1] || ''));
   try {
-    const data = await api.getPlatformAdminData();
-    const provider = data.providers.find(item => item.id === params.get('provider'));
+    const data = isPlatformOwner ? await api.getPlatformAdminData() : await api.getProviderBillingData();
+    const provider = isPlatformOwner ? data.providers.find(item => item.id === params.get('provider')) : state.tenants.providers.find(item => item.id === api.getActiveTenant().providerId);
+    if (isProviderOwner && params.get('provider') !== api.getActiveTenant().providerId) throw new Error('You can only change your own provider subscription.');
     const plan = data.plans.find(item => item.id === params.get('plan'));
     if (!provider || !plan) throw new Error('Provider or plan could not be found.');
     app.innerHTML = shell('platform-checkout', `<div class="platform-checkout"><div class="eyebrow">Test payment</div><h2>Start ${h(plan.name)} for ${h(provider.name)}</h2><p class="lead">This is a simulated checkout. It does not contact TNG, a bank or a payment gateway.</p><section class="platform-checkout-card"><div class="checkout-summary"><span>Plan</span><strong>${h(plan.name)}</strong><small>${h(plan.description || '')}</small></div><div class="checkout-summary"><span>Monthly price</span><strong>RM ${Number(plan.monthly_price_myr).toFixed(2)}</strong><small>Renews monthly from the successful payment date.</small></div><div class="checkout-summary"><span>Included limits</span><strong>${plan.max_locations ?? 'Unlimited'} locations · ${plan.max_staff ?? 'Unlimited'} staff</strong><small>${plan.max_monthly_bookings ?? 'Unlimited'} bookings per month</small></div><div class="mock-payment-badge">MOCK MODE · NO REAL CHARGE</div><div class="confirmation-actions"><button class="btn secondary" id="cancelMockCheckout" type="button">Cancel</button><button class="btn secondary" id="failMockCheckout" type="button">Simulate failed payment</button><button class="btn" id="successMockCheckout" type="button">Simulate successful payment</button></div></section></div>`);
@@ -676,6 +679,36 @@ async function pagePlatformCheckout() {
     app.innerHTML = shell('platform-checkout', `<div class="eyebrow">Test payment</div><h2>Could not load checkout</h2><p class="lead" style="color:#b3261e">${h(error?.message || 'Unknown error')}</p><button class="btn" id="backToPlatform" type="button">Back to platform admin</button>`);
     wireNav();
     document.getElementById('backToPlatform').onclick = () => { location.hash = '#/staff/platform-admin'; };
+  }
+}
+
+async function pageStaffBilling() {
+  const myGen = ++renderGen;
+  const staff = await requireStaff(myGen);
+  if (!staff) return;
+  if (!['owner', 'platform_owner'].includes(staff.role)) {
+    app.innerHTML = shell('billing', '<div class="eyebrow">Account</div><h2>Owner access only</h2><p class="lead">Subscription and payment details are visible to the provider owner.</p>');
+    wireNav();
+    return;
+  }
+  try {
+    const data = await api.getProviderBillingData();
+    if (myGen !== renderGen) return;
+    const subscription = data.subscription || {};
+    const plan = data.plans.find(item => item.id === subscription.plan_id);
+    const status = subscription.status || 'not started';
+    const nextBilling = subscription.next_billing_at || subscription.current_period_end;
+    const planOptions = data.plans.map(item => `<option value="${h(item.id)}" ${item.id === subscription.plan_id ? 'selected' : ''}>${h(item.name)} · RM ${Number(item.monthly_price_myr).toFixed(2)}/month</option>`).join('');
+    const eventRows = data.events.map(event => `<div class="billing-event"><div><strong>${h(String(event.event_type || '').replaceAll('_', ' '))}</strong><span>${h(event.status || '')}</span></div><time>${h(fmtDateTime(event.occurred_at || event.created_at))}</time><b>RM ${Number(event.amount_myr || 0).toFixed(2)}</b></div>`).join('') || '<p class="lead">No payment events recorded yet.</p>';
+    app.innerHTML = shell('billing', `<header class="settings-page-head"><div><div class="eyebrow">Account</div><h2>Billing & subscription</h2><p class="lead">Your plan, renewal dates, invoices and payment status.</p></div><span class="history-status ${['past_due', 'incomplete', 'unpaid'].includes(status) ? 'status-alert' : ''}">${h(status.replaceAll('_', ' '))}</span></header>${data.schemaReady ? '' : `<div class="billing-notice"><strong>Billing setup is still being connected.</strong><span>${h(data.warning || 'The screen is showing safe mock data until the billing database migration is available.')}</span></div>`}<section class="billing-summary-grid"><article><span>Current plan</span><strong>${h(plan?.name || 'No plan')}</strong><small>${plan ? `RM ${Number(plan.monthly_price_myr).toFixed(2)} per month` : 'Choose a plan to get started'}</small></article><article><span>Started</span><strong>${subscription.started_at ? h(fmtDateTime(subscription.started_at)) : '—'}</strong><small>${subscription.payment_provider === 'mock' ? 'Test payment' : 'Payment record'}</small></article><article><span>Next billing</span><strong>${nextBilling ? h(fmtDateTime(nextBilling)) : '—'}</strong><small>${subscription.cancel_at_period_end ? 'Ends at period end' : 'Renews automatically'}</small></article></section><section class="overview-panel billing-panel"><div class="section-heading"><div><h3>Manage plan</h3><p>Plan changes should be confirmed through checkout. Existing access remains until the change is applied.</p></div></div><div class="billing-plan-actions"><select id="billingPlan" aria-label="Choose a plan">${planOptions || '<option>No plans available</option>'}</select><button class="btn compact" id="changeBillingPlan" type="button">Change plan</button>${subscription.plan_id ? `<button class="btn secondary compact" id="cancelBillingPlan" type="button">${subscription.cancel_at_period_end ? 'Keep plan' : 'End plan at renewal'}</button>` : ''}</div><p id="billingMessage" class="lead" role="status"></p></section><section class="overview-panel billing-panel"><div class="section-heading"><div><h3>Invoices & payment history</h3><p>Every payment attempt is retained for reconciliation.</p></div><span class="section-count">${data.events.length}</span></div><div class="billing-events">${eventRows}</div></section>`);
+    document.getElementById('changeBillingPlan')?.addEventListener('click', () => { const planId = document.getElementById('billingPlan').value; if (planId) location.hash = `#/staff/platform-checkout?provider=${encodeURIComponent(api.getActiveTenant().providerId)}&plan=${encodeURIComponent(planId)}`; });
+    document.getElementById('cancelBillingPlan')?.addEventListener('click', async event => { event.currentTarget.disabled = true; try { await api.simulateMockSubscription({ providerId: api.getActiveTenant().providerId, planId: subscription.plan_id, outcome: subscription.cancel_at_period_end ? 'success' : 'cancelled' }); alert(subscription.cancel_at_period_end ? 'The plan remains active.' : 'Mock cancellation recorded. A real gateway will cancel at the period end.'); await pageStaffBilling(); } catch (error) { event.currentTarget.disabled = false; alert(error?.message || 'Could not update the plan.'); } });
+    wireNav();
+  } catch (error) {
+    if (myGen !== renderGen) return;
+    app.innerHTML = shell('billing', `<div class="eyebrow">Account</div><h2>Could not load billing</h2><p class="lead" style="color:#b3261e">${h(error?.message || 'Unknown error')}</p><button class="btn" id="retryBilling" type="button">Try again</button>`);
+    wireNav();
+    document.getElementById('retryBilling').onclick = pageStaffBilling;
   }
 }
 
@@ -1073,6 +1106,7 @@ const routes = {
   '#/staff/board': pageStaffBoard,
   '#/staff/overview': pageStaffOverview,
   '#/staff/analytics': pageStaffAnalytics,
+  '#/staff/billing': pageStaffBilling,
   '#/staff/history': pageStaffHistory,
   '#/staff/platform-admin': pagePlatformAdmin,
   '#/staff/platform-checkout': pagePlatformCheckout,

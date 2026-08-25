@@ -62,19 +62,48 @@ export async function getPlatformAdminData() {
 
 export async function simulateMockSubscription({ providerId, planId, outcome = 'success' }) {
   const db = ensureSupabase();
-  const { data: plan, error: planError } = await db.from('subscription_plans').select('*').eq('id', planId).single();
-  errorOrThrow(planError, 'loading mock billing plan');
+  let { data: plan, error: planError } = await db.from('subscription_plans').select('*').eq('id', planId).single();
+  if (planError) {
+    const fallbackPlans = { trial: { id: 'trial', name: 'Trial', monthly_price_myr: 0 }, starter: { id: 'starter', name: 'Starter', monthly_price_myr: 49 }, growth: { id: 'growth', name: 'Growth', monthly_price_myr: 129 } };
+    plan = fallbackPlans[planId];
+    if (!plan) errorOrThrow(planError, 'loading mock billing plan');
+  }
   const now = new Date();
   const periodEnd = new Date(now); periodEnd.setMonth(periodEnd.getMonth() + 1);
   const checkoutId = `mock_cs_${Date.now().toString(36)}`;
   const state = readMockBilling();
   const status = outcome === 'success' ? 'active' : outcome === 'failure' ? 'incomplete' : 'cancelled';
-  const subscription = { provider_id: providerId, plan_id: plan.id, status, payment_provider: 'mock', checkout_id: checkoutId, billing_interval: 'month', started_at: now.toISOString(), current_period_start: outcome === 'success' ? now.toISOString() : null, current_period_end: outcome === 'success' ? periodEnd.toISOString() : null, next_billing_at: outcome === 'success' ? periodEnd.toISOString() : null, cancel_at_period_end: false, last_payment_at: outcome === 'success' ? now.toISOString() : null, last_payment_status: outcome === 'success' ? 'paid' : 'failed', updated_at: now.toISOString() };
+  const subscription = { provider_id: providerId, plan_id: plan.id, status, payment_provider: 'mock', checkout_id: checkoutId, billing_interval: 'month', started_at: now.toISOString(), current_period_start: outcome === 'failure' ? null : now.toISOString(), current_period_end: outcome === 'failure' ? null : periodEnd.toISOString(), next_billing_at: outcome === 'failure' ? null : periodEnd.toISOString(), cancel_at_period_end: outcome === 'cancelled', last_payment_at: outcome === 'success' ? now.toISOString() : null, last_payment_status: outcome === 'success' ? 'paid' : outcome === 'failure' ? 'failed' : 'cancelled', updated_at: now.toISOString() };
   const event = { idempotency_key: checkoutId, provider_id: providerId, plan_id: plan.id, payment_provider: 'mock', event_type: outcome === 'success' ? 'invoice.paid' : outcome === 'failure' ? 'invoice.payment_failed' : 'checkout.canceled', amount_myr: Number(plan.monthly_price_myr || 0), currency: 'myr', status, occurred_at: now.toISOString() };
-  if (outcome === 'cancelled') delete state.subscriptions[providerId]; else state.subscriptions[providerId] = subscription;
+  state.subscriptions[providerId] = subscription;
   state.events = [event, ...(state.events || [])].filter((item, index, items) => items.findIndex(candidate => candidate.idempotency_key === item.idempotency_key) === index).slice(0, 50);
   writeMockBilling(state);
   return { subscription, event };
+}
+
+export async function getProviderBillingData() {
+  const db = ensureSupabase();
+  const mockBilling = readMockBilling();
+  const mockSubscription = mockBilling.subscriptions[activeTenant.providerId];
+  const fallbackPlans = [
+    { id: 'trial', name: 'Trial', description: 'Try Docket with the core booking tools.', monthly_price_myr: 0, max_locations: 1, max_staff: 3, max_monthly_bookings: 100 },
+    { id: 'starter', name: 'Starter', description: 'For a single growing outlet.', monthly_price_myr: 49, max_locations: 1, max_staff: 10, max_monthly_bookings: 500 },
+    { id: 'growth', name: 'Growth', description: 'For providers operating multiple outlets.', monthly_price_myr: 129, max_locations: 5, max_staff: 30, max_monthly_bookings: 2500 },
+  ];
+  let subscription = null; let plans = []; let events = []; let schemaReady = true; let warning = '';
+  try {
+    const { data, error } = await db.from('provider_subscriptions').select('*').eq('provider_id', activeTenant.providerId).maybeSingle();
+    errorOrThrow(error, 'loading provider subscription'); subscription = data;
+  } catch (error) { schemaReady = false; warning = error?.message || 'Provider billing access is not configured yet.'; }
+  try {
+    const { data, error } = await db.from('subscription_plans').select('*').eq('is_active', true).order('monthly_price_myr');
+    errorOrThrow(error, 'loading billing plans'); plans = data || [];
+  } catch { plans = fallbackPlans; }
+  try {
+    const { data, error } = await db.from('platform_billing_events').select('*').eq('provider_id', activeTenant.providerId).order('occurred_at', { ascending: false }).limit(100);
+    errorOrThrow(error, 'loading billing events'); events = data || [];
+  } catch { schemaReady = false; }
+  return { subscription: mockSubscription || subscription, plans: plans.length ? plans : fallbackPlans, events: mockBilling.events.filter(item => item.provider_id === activeTenant.providerId).concat(mockSubscription ? [] : events), schemaReady, warning };
 }
 
 export async function saveSubscriptionPlan({ id, name, description = '', monthlyPriceMyr, maxLocations, maxStaff, maxMonthlyBookings, isActive = true }) {

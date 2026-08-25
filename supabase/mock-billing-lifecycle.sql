@@ -45,3 +45,27 @@ create policy platform_billing_events_platform_owner on public.platform_billing_
   for all to authenticated
   using (exists (select 1 from public.staff me where me.id = (select auth.uid()) and me.is_active and me.role = 'platform_owner'))
   with check (exists (select 1 from public.staff me where me.id = (select auth.uid()) and me.is_active and me.role = 'platform_owner'));
+
+-- Providers may view their own catalogue, subscription and billing history.
+drop policy if exists subscription_plans_provider_owner_select on public.subscription_plans;
+create policy subscription_plans_provider_owner_select on public.subscription_plans for select to authenticated
+  using (is_active and exists (
+    select 1 from public.staff me
+    where me.id = (select auth.uid()) and me.is_active and me.role in ('owner', 'manager')
+  ));
+
+drop policy if exists provider_subscriptions_provider_owner_select on public.provider_subscriptions;
+create policy provider_subscriptions_provider_owner_select on public.provider_subscriptions for select to authenticated
+  using (exists (
+    select 1 from public.staff me
+    where me.id = (select auth.uid()) and me.is_active and me.provider_id = provider_subscriptions.provider_id
+      and me.role in ('owner', 'manager')
+  ));
+
+drop policy if exists platform_billing_events_provider_owner_select on public.platform_billing_events;
+create policy platform_billing_events_provider_owner_select on public.platform_billing_events for select to authenticated
+  using (exists (
+    select 1 from public.staff me
+    where me.id = (select auth.uid()) and me.is_active and me.provider_id = platform_billing_events.provider_id
+      and me.role in ('owner', 'manager')
+  ));

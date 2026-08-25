@@ -206,6 +206,22 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .checkout-summary strong{font-size:18px;}
 .checkout-summary small{color:var(--ink-soft);font-size:11px;}
 .mock-payment-badge{padding:10px;border:1px dashed #C8D7C9;border-radius:9px;background:#F0F8F1;color:#26745E;font-size:10px;font-weight:800;letter-spacing:.06em;text-align:center;}
+.billing-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px;}
+.billing-summary-grid article{display:grid;gap:5px;padding:15px;border:1px solid var(--line);border-radius:12px;background:var(--paper);}
+.billing-summary-grid span{color:#71817C;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
+.billing-summary-grid strong{font-size:16px;overflow-wrap:anywhere;}
+.billing-summary-grid small{color:var(--ink-soft);font-size:10px;}
+.billing-panel{margin-top:16px;}
+.billing-notice{display:grid;gap:3px;margin-top:16px;padding:11px 13px;border:1px solid #E7C76B;border-radius:10px;background:#FFF8DF;color:#765E13;font-size:11px;}
+.billing-notice strong{font-size:12px;}
+.billing-plan-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.billing-plan-actions select{flex:1;min-width:190px;padding:10px 32px 10px 10px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font:600 12px inherit;}
+.billing-plan-actions .compact{min-width:0;margin-top:0;}
+.billing-events{display:grid;gap:0;}
+.billing-event{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #E8ECE8;font-size:11px;}
+.billing-event div{display:grid;gap:3px;min-width:0;}
+.billing-event span,.billing-event time{color:var(--ink-soft);font-size:10px;}
+.billing-event b{font-size:11px;white-space:nowrap;}
 .analytics-row span{color:var(--ink-soft);font-size:11px;}
 .customer-manage{margin-bottom:18px;background:var(--paper);}
 .customer-manage h3{margin-top:0;}
@@ -545,6 +561,9 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
   .overview-metrics strong{font-size:20px;}
   .overview-grid{grid-template-columns:1fr;gap:10px;}
   .overview-panel{padding:14px;}
+  .billing-summary-grid{grid-template-columns:1fr;gap:8px;}
+  .billing-event{grid-template-columns:minmax(0,1fr) auto;}
+  .billing-event b{grid-column:2;grid-row:1 / span 2;}
   .overview-attention-row,.overview-bay-row,.overview-booking-row{align-items:flex-start;}
   .platform-provider-actions,.platform-plan-card,.platform-new-plan{grid-template-columns:1fr 1fr;}
   .platform-provider-actions .compact-btn,.platform-plan-card .compact-btn,.platform-new-plan .compact-btn{grid-column:1/-1;}

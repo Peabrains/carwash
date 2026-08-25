@@ -95,6 +95,7 @@ export async function getPlatformAdminData() { if (useSupabase) return supabaseA
 export async function saveSubscriptionPlan(payload) { if (useSupabase) return supabaseApi.saveSubscriptionPlan(payload); throw new Error('Platform plan management requires Supabase mode.'); }
 export async function saveProviderSubscription(payload) { if (useSupabase) return supabaseApi.saveProviderSubscription(payload); throw new Error('Platform subscription management requires Supabase mode.'); }
 export async function simulateMockSubscription(payload) { if (useSupabase) return supabaseApi.simulateMockSubscription(payload); throw new Error('Mock billing requires Supabase mode.'); }
+export async function getProviderBillingData() { if (useSupabase) return supabaseApi.getProviderBillingData(); throw new Error('Provider billing requires Supabase mode.'); }
 
 export async function createProvider({ name, description = '' }) {
   if (useSupabase) return supabaseApi.createProvider({ name, description });
