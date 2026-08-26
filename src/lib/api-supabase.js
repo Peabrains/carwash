@@ -147,6 +147,7 @@ export async function saveStaff({ email, name = '', role = 'worker', isActive = 
   }
   return data;
 }
+export async function revokeStaffAccess({ staffId = null, invitationId = null } = {}) { const db = ensureSupabase(); const { data, error } = await db.rpc('revoke_staff_access', { p_staff_id: staffId, p_invitation_id: invitationId }); errorOrThrow(error, 'removing staff access'); return data; }
 
 export async function getServices({ includeInactive = false } = {}) { const db = ensureSupabase(); let request = db.from('services').select('*').eq('provider_id', activeTenant.providerId).eq('location_id', activeTenant.locationId).order('name'); if (!includeInactive) request = request.eq('is_active', true); const { data, error } = await request; errorOrThrow(error, 'loading services'); return data || []; }
 export async function saveService({ id, name, durationMinutes, priceMyr, isActive = true }) { const db = ensureSupabase(); const payload = { ...scope(), name: name.trim(), duration_minutes: Number(durationMinutes), price_myr: Number(priceMyr), is_active: isActive, updated_at: new Date().toISOString() }; const { data, error } = id ? await db.from('services').update(payload).eq('id', id).select().single() : await db.from('services').insert(payload).select().single(); errorOrThrow(error, 'saving service'); return data; }

@@ -132,6 +132,12 @@ export async function saveStaff({ email, name = '', role = 'worker', isActive = 
   await setDoc(doc(firestore, 'staff', normalized), { email: normalized, name: name.trim() || normalized, role, is_active: isActive, ...scope(), updated_at: new Date().toISOString() }, { merge: true });
   return { id: normalized, email: normalized, name, role, is_active: isActive, ...scope() };
 }
+export async function revokeStaffAccess({ staffId = null, invitationId = null } = {}) {
+  if (useSupabase) return supabaseApi.revokeStaffAccess({ staffId, invitationId });
+  ensureFirebase();
+  if (staffId) await updateDoc(doc(firestore, 'staff', staffId), { is_active: false, updated_at: new Date().toISOString() });
+  return { status: 'revoked', staff_id: staffId, invitation_id: invitationId };
+}
 
 // ── Operational data ────────────────────────────────────────────────
 export async function getServices({ includeInactive = false } = {}) {

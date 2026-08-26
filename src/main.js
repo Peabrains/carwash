@@ -965,7 +965,7 @@ async function pageStaffOrganization() {
     <label class="check bay-active"><input data-field="active" type="checkbox" ${bay.is_active !== false ? 'checked' : ''}><span>Active</span></label>
     <button class="mini-btn" data-save-bay="${h(bay.id)}">Save</button>
   </div>`).join('') || '<p class="lead">No bays configured for this location.</p>';
-  const staffRows = staffMembers.map(member => `<div class="settings-row"><div><strong>${h(member.name || member.email || member.id)}</strong><div class="muted">${h(member.email || member.id)} · ${h(member.role)}</div></div><span class="tag ${member.pending ? 'pending' : member.is_active === false ? 'busy' : ''}">${member.pending ? 'Invitation pending' : member.is_active === false ? 'Inactive' : 'Active'}</span></div>`).join('') || '<p class="lead">No staff assigned to this location.</p>';
+  const staffRows = staffMembers.map(member => `<div class="settings-row"><div><strong>${h(member.name || member.email || member.id)}</strong><div class="muted">${h(member.email || member.id)} · ${h(member.role)}</div></div><div class="row-actions"><span class="tag ${member.pending ? 'pending' : member.is_active === false ? 'busy' : ''}">${member.pending ? 'Invitation pending' : member.is_active === false ? 'Inactive' : 'Active'}</span>${member.is_active !== false && member.id !== staff.id ? `<button class="mini-btn danger-outline" data-remove-staff data-staff-id="${member.pending ? '' : h(member.id)}" data-invitation-id="${member.pending ? h(member.id) : ''}">${member.pending ? 'Cancel invitation' : 'Remove access'}</button>` : ''}</div></div>`).join('') || '<p class="lead">No staff assigned to this location.</p>';
   const providerProfileSection = ['platform_owner', 'owner'].includes(staff.role)
     ? `<section class="management-section profile-section"><div class="section-heading"><div><h3>Provider profile</h3><p>Public information shown in the customer catalogue.</p></div><span class="section-icon">01</span></div><div class="manage-form"><div class="field"><label>Provider name</label><input id="providerName" value="${h(provider?.name || '')}"></div><div class="field"><label>Description</label><input id="providerDescription" value="${h(provider?.description || '')}" placeholder="What makes this car wash different?"></div></div><button class="btn compact" id="saveProviderProfile">Save profile</button></section>`
     : `<section class="management-section profile-section"><div class="section-heading"><div><h3>Provider profile</h3><p>Public information shown in the customer catalogue.</p></div></div><p class="lead">${h(provider?.name || tenant.providerId)}${provider?.description ? ` — ${h(provider.description)}` : ''}</p></section>`;
@@ -1058,6 +1058,13 @@ async function pageStaffOrganization() {
     const button = event.currentTarget; const message = document.getElementById('staffMessage'); button.disabled = true; message.textContent = 'Saving staff access…';
     try { const result = await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); message.textContent = result?.emailSent ? 'Invitation sent. Staff should open the email and choose a password or continue with Google.' : (result?.status === 'active' ? 'Staff access saved.' : 'Invitation saved.'); refresh(); } catch (error) { message.textContent = `Could not save staff access: ${error?.message || 'Unknown error'}`; } finally { button.disabled = false; }
   });
+  document.querySelectorAll('[data-remove-staff]').forEach(button => button.addEventListener('click', async () => {
+    const label = button.dataset.invitationId ? 'cancel this pending invitation' : 'remove this staff member’s access';
+    if (!window.confirm(`Are you sure you want to ${label}? Existing bookings and history will be kept.`)) return;
+    button.disabled = true;
+    try { await api.revokeStaffAccess({ staffId: button.dataset.staffId || null, invitationId: button.dataset.invitationId || null }); refresh(); }
+    catch (error) { alert(`Could not remove staff access: ${error?.message || 'Unknown error'}`); button.disabled = false; }
+  }));
   document.getElementById('addProvider')?.addEventListener('click', async () => {
     try { const name = document.getElementById('newProviderName').value.trim(); if (!name) return alert('Enter a provider name.'); await api.createProvider({ name }); state.tenants = await api.getAccessibleTenants(staff); refresh(); } catch (error) { showManageError(error); }
   });
