@@ -25,6 +25,16 @@ export async function signInStaffWithGoogle() {
   return data;
 }
 
+export async function linkStaffGoogleIdentity() {
+  if (!supabase) throw new Error('Supabase Authentication is not configured.');
+  const { data, error } = await supabase.auth.linkIdentity({
+    provider: 'google',
+    options: { redirectTo: `${redirectUrl()}?staff_invite=1#/staff/setup` },
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function signInStaffWithPassword(email, password) {
   if (!supabase) throw new Error('Supabase Authentication is not configured.');
   const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });

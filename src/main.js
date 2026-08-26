@@ -73,8 +73,7 @@ async function pageStaffLogin() {
     <h2>Wash Point staff</h2>
     <p class="lead">Use your staff email and password.</p>
     <form id="staffPasswordForm"><div class="field"><label for="staffEmail">Email</label><input id="staffEmail" type="email" autocomplete="email" required></div><div class="field"><label for="staffPassword">Password</label><input id="staffPassword" type="password" autocomplete="current-password" minlength="8" required></div><button class="btn" id="doPasswordSignIn" type="submit">Sign in</button></form>
-    <button class="btn secondary" id="showStaffSignup" type="button">Set up staff account</button>
-    <div id="staffSignupPanel" hidden><p class="lead">Use the same email the owner invited. You can set a password after the invitation is created.</p><form id="staffSignupForm"><div class="field"><label for="signupEmail">Email</label><input id="signupEmail" type="email" autocomplete="email" required></div><div class="field"><label for="signupPassword">Create password</label><input id="signupPassword" type="password" autocomplete="new-password" minlength="8" required></div><button class="btn" type="submit">Create account</button></form></div>
+    <a class="btn secondary" href="#/staff/setup">I have an invitation link</a>
     <button class="btn secondary" id="showStaffReset" type="button">Forgot password?</button>
     <div id="staffResetPanel" hidden><form id="staffResetForm"><div class="field"><label for="resetEmail">Email</label><input id="resetEmail" type="email" autocomplete="email" required></div><button class="btn" type="submit">Send reset email</button></form></div>
     <div class="auth-divider"><span>or</span></div><button class="btn secondary" id="doSignIn">Continue with Google</button>
@@ -85,8 +84,6 @@ async function pageStaffLogin() {
     const button = document.getElementById('doPasswordSignIn'); button.disabled = true;
     try { const result = await api.signInStaffWithPassword(document.getElementById('staffEmail').value, document.getElementById('staffPassword').value); if (result?.user) { location.hash = '#/staff/board'; router(); } else throw new Error('Sign-in did not create a session.'); } catch (error) { const errEl = document.getElementById('errMsg'); errEl.textContent = error?.message || 'Could not sign in.'; errEl.style.display = 'block'; } finally { button.disabled = false; }
   };
-  document.getElementById('showStaffSignup').onclick = () => { document.getElementById('staffSignupPanel').hidden = !document.getElementById('staffSignupPanel').hidden; };
-  document.getElementById('staffSignupForm').onsubmit = async event => { event.preventDefault(); const button = event.currentTarget.querySelector('button'); button.disabled = true; try { const result = await api.signUpStaffWithPassword(document.getElementById('signupEmail').value, document.getElementById('signupPassword').value); const errEl = document.getElementById('errMsg'); errEl.textContent = result?.session ? 'Account created. Signing you in…' : 'Account created. Check your email to verify it, then sign in.'; errEl.style.display = 'block'; } catch (error) { const errEl = document.getElementById('errMsg'); errEl.textContent = error?.message || 'Could not create the account.'; errEl.style.display = 'block'; } finally { button.disabled = false; } };
   document.getElementById('showStaffReset').onclick = () => { document.getElementById('staffResetPanel').hidden = !document.getElementById('staffResetPanel').hidden; };
   document.getElementById('staffResetForm').onsubmit = async event => { event.preventDefault(); try { await api.sendStaffPasswordReset(document.getElementById('resetEmail').value); alert('If that email is registered, a password reset link has been sent.'); } catch (error) { alert(error?.message || 'Could not send reset email.'); } };
   // Wire the button before checking for a previous redirect result. The
@@ -215,6 +212,36 @@ async function pageStaffPasswordReset() {
     if (myGen !== renderGen) return;
     app.innerHTML = shell('', `<div class="eyebrow">Staff account</div><h2>Password link expired</h2><p class="lead">Request a new password-reset email and try again.</p><button class="btn" id="backToLogin" type="button">Back to sign in</button>`);
     document.getElementById('backToLogin').onclick = () => { location.hash = '#/staff/login'; router(); };
+  }
+}
+
+async function pageStaffSetup() {
+  const myGen = ++renderGen;
+  try {
+    await api.finishStaffRedirect?.();
+    const user = await api.getAuthUser();
+    if (!user) {
+      app.innerHTML = shell('', '<div class="eyebrow">Staff account</div><h2>Open your invitation email first</h2><p class="lead">This page is only for the secure link sent by the owner. Open that email, then choose a password or continue with Google.</p><a class="btn" href="#/staff/login">Back to sign in</a>');
+      return;
+    }
+    app.innerHTML = shell('', `<div class="eyebrow">Staff account</div><h2>Finish setting up your access</h2><p class="lead">You are signing in as <strong>${h(user.email)}</strong>. Choose one option below.</p><form id="staffSetupForm"><div class="field"><label for="setupPassword">Create password</label><input id="setupPassword" type="password" autocomplete="new-password" minlength="8" required></div><div class="field"><label for="setupPasswordConfirm">Confirm password</label><input id="setupPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required></div><button class="btn" type="submit">Set password & continue</button><p id="setupMessage" class="lead" role="status"></p></form><div class="auth-divider"><span>or</span></div><button class="btn secondary" id="setupGoogle" type="button">Continue with Google</button><button class="btn ghost" id="setupSignout" type="button">Use a different account</button>`);
+    const message = document.getElementById('setupMessage');
+    document.getElementById('staffSetupForm').onsubmit = async event => {
+      event.preventDefault();
+      const password = document.getElementById('setupPassword').value;
+      if (password !== document.getElementById('setupPasswordConfirm').value) { message.textContent = 'Passwords do not match.'; return; }
+      const button = event.currentTarget.querySelector('button'); button.disabled = true; message.textContent = 'Saving your password…';
+      try { await api.updateStaffPassword(password); await api.getCurrentStaff(); message.textContent = 'Access ready. Opening the staff workspace…'; setTimeout(() => { location.hash = '#/staff/board'; router(); }, 300); }
+      catch (error) { button.disabled = false; message.textContent = error?.message || 'Could not finish setting up your account.'; }
+    };
+    document.getElementById('setupGoogle').onclick = async event => {
+      event.currentTarget.disabled = true; message.textContent = 'Opening Google…';
+      try { await api.linkStaffGoogleIdentity(); } catch (error) { event.currentTarget.disabled = false; message.textContent = error?.message || 'Could not connect Google.'; }
+    };
+    document.getElementById('setupSignout').onclick = async () => { await api.signOutStaff(); location.hash = '#/staff/login'; router(); };
+  } catch (error) {
+    if (myGen !== renderGen) return;
+    app.innerHTML = shell('', `<div class="eyebrow">Staff account</div><h2>That invitation link is no longer valid</h2><p class="lead" style="color:#b3261e">${h(error?.message || 'Please ask the owner to send a new invitation.')}</p><a class="btn" href="#/staff/login">Back to sign in</a>`);
   }
 }
 
@@ -1029,7 +1056,7 @@ async function pageStaffOrganization() {
   document.getElementById('addStaff')?.addEventListener('click', async event => {
     const email = document.getElementById('staffEmail').value.trim(); if (!email) return alert('Enter the staff email.');
     const button = event.currentTarget; const message = document.getElementById('staffMessage'); button.disabled = true; message.textContent = 'Saving staff access…';
-    try { const result = await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); message.textContent = result?.status === 'invited' ? 'Invitation saved. Staff can now create an email/password account.' : 'Staff access saved.'; refresh(); } catch (error) { message.textContent = `Could not save staff access: ${error?.message || 'Unknown error'}`; } finally { button.disabled = false; }
+    try { const result = await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); message.textContent = result?.emailSent ? 'Invitation sent. Staff should open the email and choose a password or continue with Google.' : (result?.status === 'active' ? 'Staff access saved.' : 'Invitation saved.'); refresh(); } catch (error) { message.textContent = `Could not save staff access: ${error?.message || 'Unknown error'}`; } finally { button.disabled = false; }
   });
   document.getElementById('addProvider')?.addEventListener('click', async () => {
     try { const name = document.getElementById('newProviderName').value.trim(); if (!name) return alert('Enter a provider name.'); await api.createProvider({ name }); state.tenants = await api.getAccessibleTenants(staff); refresh(); } catch (error) { showManageError(error); }
@@ -1132,6 +1159,7 @@ const routes = {
   '#/': pageCustomerLanding,
   '#/book': pageCustomerBook,
   '#/staff/login': pageStaffLogin,
+  '#/staff/setup': pageStaffSetup,
   '#/staff/reset-password': pageStaffPasswordReset,
   '#/staff/board': pageStaffBoard,
   '#/staff/overview': pageStaffOverview,

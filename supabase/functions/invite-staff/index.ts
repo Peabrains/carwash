@@ -54,7 +54,7 @@ Deno.serve(async (request) => {
   // Admin invitation is deliberately server-only: this key bypasses RLS.
   const adminClient = createClient(supabaseUrl, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
   if (invitation?.status === "invited") {
-    const redirectTo = Deno.env.get("STAFF_INVITE_REDIRECT_URL") ?? "https://peabrains.github.io/carwash/#/staff/login";
+    const redirectTo = Deno.env.get("STAFF_INVITE_REDIRECT_URL") ?? "https://peabrains.github.io/carwash/?staff_invite=1#/staff/setup";
     const { error: emailError } = await adminClient.auth.admin.inviteUserByEmail(email, {
       data: { name, role, provider_id: providerId, location_id: locationId },
       redirectTo,

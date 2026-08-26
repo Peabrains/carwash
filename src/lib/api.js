@@ -97,6 +97,7 @@ export async function saveProviderSubscription(payload) { if (useSupabase) retur
 export async function simulateMockSubscription(payload) { if (useSupabase) return supabaseApi.simulateMockSubscription(payload); throw new Error('Mock billing requires Supabase mode.'); }
 export async function getProviderBillingData() { if (useSupabase) return supabaseApi.getProviderBillingData(); throw new Error('Provider billing requires Supabase mode.'); }
 export async function signInStaffWithPassword(email, password) { if (useSupabase) return supabaseApi.signInStaffWithPassword(email, password); throw new Error('Email/password staff sign-in requires Supabase mode.'); }
+export async function linkStaffGoogleIdentity() { if (useSupabase) return supabaseApi.linkStaffGoogleIdentity(); throw new Error('Google staff setup requires Supabase mode.'); }
 export async function signUpStaffWithPassword(email, password) { if (useSupabase) return supabaseApi.signUpStaffWithPassword(email, password); throw new Error('Email/password staff sign-up requires Supabase mode.'); }
 export async function sendStaffPasswordReset(email) { if (useSupabase) return supabaseApi.sendStaffPasswordReset(email); throw new Error('Password reset requires Supabase mode.'); }
 export async function updateStaffPassword(password) { if (useSupabase) return supabaseApi.updateStaffPassword(password); throw new Error('Password update requires Supabase mode.'); }
