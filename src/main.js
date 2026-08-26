@@ -1027,7 +1027,7 @@ async function pageStaffOrganization() {
     try { const name = document.getElementById('newBayName').value.trim(); if (!name) return alert('Enter a bay name.'); await api.saveBay({ name }); refresh(); } catch (error) { showManageError(error); }
   };
   document.getElementById('addStaff')?.addEventListener('click', async event => {
-    const email = document.getElementById('staffEmail').value.trim(); if (!email) return alert('Enter the staff email used for Google sign-in.');
+    const email = document.getElementById('staffEmail').value.trim(); if (!email) return alert('Enter the staff email.');
     const button = event.currentTarget; const message = document.getElementById('staffMessage'); button.disabled = true; message.textContent = 'Saving staff access…';
     try { const result = await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); message.textContent = result?.status === 'invited' ? 'Invitation saved. Staff can now create an email/password account.' : 'Staff access saved.'; refresh(); } catch (error) { message.textContent = `Could not save staff access: ${error?.message || 'Unknown error'}`; } finally { button.disabled = false; }
   });

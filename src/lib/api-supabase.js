@@ -128,7 +128,25 @@ export async function updateProvider(providerId, patch) { const db = ensureSupab
 export async function createLocation({ providerId = activeTenant.providerId, name, address = '', timezone = 'Asia/Kuala_Lumpur' }) { const db = ensureSupabase(); const id = `${providerId}-${name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-')}`; const { data, error } = await db.from('locations').insert({ id, provider_id: providerId, name: name.trim(), address: address.trim(), timezone, is_active: true }).select().single(); errorOrThrow(error, 'creating location'); const { error: settingsError } = await db.from('booking_settings').upsert({ id: Date.now(), provider_id: providerId, location_id: id, ...MOCK_SETTINGS }, { onConflict: 'provider_id,location_id' }); errorOrThrow(settingsError, 'creating location booking settings'); return data; }
 export async function updateLocation(locationId, patch) { const db = ensureSupabase(); const { data, error } = await db.from('locations').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', locationId).select().single(); errorOrThrow(error, 'updating location'); return data; }
 export async function listStaff() { const db = ensureSupabase(); const [{ data: staff, error: staffError }, { data: invitations, error: invitationError }] = await Promise.all([db.from('staff').select('*').eq('provider_id', activeTenant.providerId).or(`location_id.is.null,location_id.eq.${activeTenant.locationId}`).order('email'), db.from('staff_invitations').select('*').eq('provider_id', activeTenant.providerId).is('accepted_at', null).or(`location_id.is.null,location_id.eq.${activeTenant.locationId}`).order('email')]); errorOrThrow(staffError, 'loading staff'); errorOrThrow(invitationError, 'loading staff invitations'); return [...(staff || []), ...(invitations || []).map(item => ({ ...item, id: item.id, is_active: true, pending: true }))]; }
-export async function saveStaff({ email, name = '', role = 'worker', isActive = true }) { const db = ensureSupabase(); const { data, error } = await db.rpc('invite_staff_member', { p_email: email.trim().toLowerCase(), p_name: name.trim(), p_role: role, p_provider_id: activeTenant.providerId, p_location_id: activeTenant.locationId, p_is_active: isActive }); errorOrThrow(error, 'saving staff invitation'); return data; }
+export async function saveStaff({ email, name = '', role = 'worker', isActive = true }) {
+  const db = ensureSupabase();
+  const { data, error } = await db.functions.invoke('invite-staff', {
+    body: {
+      email: email.trim().toLowerCase(),
+      name: name.trim(),
+      role,
+      isActive,
+      providerId: activeTenant.providerId,
+      locationId: activeTenant.locationId,
+    },
+  });
+  if (error) {
+    let detail = error.message || 'The invitation could not be sent.';
+    try { if (error.context) { const body = await error.context.json(); detail = body?.error || detail; } } catch {}
+    throw new Error(detail);
+  }
+  return data;
+}
 
 export async function getServices({ includeInactive = false } = {}) { const db = ensureSupabase(); let request = db.from('services').select('*').eq('provider_id', activeTenant.providerId).eq('location_id', activeTenant.locationId).order('name'); if (!includeInactive) request = request.eq('is_active', true); const { data, error } = await request; errorOrThrow(error, 'loading services'); return data || []; }
 export async function saveService({ id, name, durationMinutes, priceMyr, isActive = true }) { const db = ensureSupabase(); const payload = { ...scope(), name: name.trim(), duration_minutes: Number(durationMinutes), price_myr: Number(priceMyr), is_active: isActive, updated_at: new Date().toISOString() }; const { data, error } = id ? await db.from('services').update(payload).eq('id', id).select().single() : await db.from('services').insert(payload).select().single(); errorOrThrow(error, 'saving service'); return data; }
