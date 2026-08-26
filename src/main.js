@@ -980,9 +980,9 @@ async function pageStaffOrganization() {
 
     <div class="management-admin-grid">
     ${staff.role !== 'manager' ? `<section class="management-section staff-section">
-      <div class="section-heading"><div><h3>Staff access</h3><p>Invite a staff member by Google email. They can sign in after you save the invitation.</p></div><span class="section-count">${staffMembers.length} people</span></div><div class="manage-list staff-list">${staffRows}</div>
+      <div class="section-heading"><div><h3>Staff access</h3><p>Invite a staff member by email. They can create an account after you save the invitation.</p></div><span class="section-count">${staffMembers.length} people</span></div><div class="manage-list staff-list">${staffRows}</div>
       <div class="manage-form three-col">
-        <div class="field"><label>Google email</label><input id="staffEmail" type="email" placeholder="staff@example.com"></div>
+        <div class="field"><label>Staff email</label><input id="staffEmail" type="email" placeholder="staff@example.com"></div>
         <div class="field"><label>Name</label><input id="staffName" placeholder="Staff name"></div>
         <div class="field"><label>Role</label><select id="staffRole"><option value="worker">Worker</option><option value="manager">Manager</option><option value="owner">Owner</option></select></div>
         </div><p id="staffMessage" class="lead" role="status"></p><button class="btn compact" id="addStaff">Add or update staff</button>
