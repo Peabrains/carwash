@@ -23,6 +23,7 @@ if ('serviceWorker' in navigator) {
 const app = document.getElementById('app');
 const state = { staff: null, tenants: { providers: [], locations: [] } };
 const h = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+const formatRole = role => String(role || 'staff').split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()).join(' ');
 
 // Every navigation (route change, date click, settings save, etc.) bumps
 // this. Async page renders check it before touching the DOM, so a slow
@@ -53,7 +54,7 @@ function shell(navActive, innerHTML) {
       <div class="topbar">
         <div class="brand"><div class="drop"></div>Docket</div>
         ${navActive && tenantOptions ? `<div class="tenant-picker"><span>${h(currentProvider?.name || '')}</span><select id="tenantSelect" aria-label="Active location">${tenantOptions}</select></div>` : ''}
-        ${navActive && state.staff ? `<div class="staff-account"><div class="staff-identity"><strong>${h(state.staff.name || state.staff.email || 'Staff')}</strong><span>${h(state.staff.role || 'staff')}</span></div><button type="button" class="staff-signout" data-signout="1">Sign out</button></div>` : ''}
+        ${navActive && state.staff ? `<div class="staff-account"><div class="staff-identity"><strong>${h(state.staff.name || state.staff.email || 'Staff')}</strong><span>${h(formatRole(state.staff.role))}</span></div><button type="button" class="staff-signout" data-signout="1">Sign out</button></div>` : ''}
       </div>
       <div class="screen">${innerHTML}</div>
       ${navActive ? `
