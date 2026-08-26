@@ -81,6 +81,12 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .navbar .item:hover{background:rgba(216,230,109,.35);color:#12343A;}
 .navbar .item.active{color:#17363B;background:linear-gradient(145deg,rgba(229,239,145,.92),rgba(199,218,83,.72));transform:translateY(-3px);box-shadow:0 6px 16px rgba(137,158,52,.34),inset 0 1px 1px rgba(255,255,255,.78);animation:glass-nav-pop .38s cubic-bezier(.2,.85,.25,1.25);}
 .navbar .item:active{transform:scale(.95);}
+.staff-account{display:flex;align-items:center;gap:10px;min-width:0;margin-left:auto;}
+.staff-identity{display:grid;gap:2px;min-width:0;text-align:right;}
+.staff-identity strong{max-width:180px;overflow:hidden;color:#F7F8EF;font-size:11px;line-height:1.1;text-overflow:ellipsis;white-space:nowrap;}
+.staff-identity span{color:#BFD0C9;font-size:9px;letter-spacing:.05em;text-transform:capitalize;}
+.staff-signout{border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:7px 10px;background:rgba(255,255,255,.08);color:#F7F8EF;font:600 10px inherit;cursor:pointer;white-space:nowrap;}
+.staff-signout:hover{background:rgba(255,255,255,.18);}
 .nav-more-wrap{position:relative;flex:1;min-width:0;}
 .nav-more-wrap>.item{width:100%;}
 .nav-menu{position:absolute;right:0;bottom:calc(100% + 10px);display:grid;min-width:170px;padding:7px;border:1px solid rgba(255,255,255,.9);border-radius:15px;background:rgba(252,252,248,.94);box-shadow:0 14px 30px rgba(18,52,58,.2);backdrop-filter:blur(24px) saturate(1.5);-webkit-backdrop-filter:blur(24px) saturate(1.5);}
@@ -544,7 +550,12 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 
 @media (max-width:700px){
   .screen{padding-left:16px;padding-right:16px;}
-  .topbar{padding:14px 16px;}
+  .topbar{padding:11px 12px;gap:8px;}
+  .topbar .brand{font-size:13px;}
+  .staff-account{gap:6px;}
+  .staff-identity strong{max-width:96px;font-size:9px;}
+  .staff-identity span{font-size:8px;}
+  .staff-signout{padding:6px 8px;font-size:9px;}
   .tenant-picker{max-width:58%;}
   .tenant-picker>span{font-size:11px;}
   .tenant-picker select{font-size:15px;}

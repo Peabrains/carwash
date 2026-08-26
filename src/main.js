@@ -39,7 +39,7 @@ function shell(navActive, innerHTML) {
   const isOwner = ['owner', 'platform_owner'].includes(state.staff?.role);
   const canEditRules = ['owner', 'platform_owner', 'manager'].includes(state.staff?.role);
   const canManage = ['owner', 'platform_owner', 'manager'].includes(state.staff?.role);
-  const moreActive = ['overview', 'analytics', 'billing', 'settings', 'platform-admin', 'platform-checkout'].includes(navActive);
+  const moreActive = ['overview', 'analytics', 'billing', 'settings', 'organization', 'platform-admin', 'platform-checkout'].includes(navActive);
   const tenant = api.getActiveTenant();
   const locations = state.tenants.locations || [];
   const currentLocation = locations.find(item => item.id === tenant.locationId);
@@ -53,14 +53,14 @@ function shell(navActive, innerHTML) {
       <div class="topbar">
         <div class="brand"><div class="drop"></div>Docket</div>
         ${navActive && tenantOptions ? `<div class="tenant-picker"><span>${h(currentProvider?.name || '')}</span><select id="tenantSelect" aria-label="Active location">${tenantOptions}</select></div>` : ''}
+        ${navActive && state.staff ? `<div class="staff-account"><div class="staff-identity"><strong>${h(state.staff.name || state.staff.email || 'Staff')}</strong><span>${h(state.staff.role || 'staff')}</span></div><button type="button" class="staff-signout" data-signout="1">Sign out</button></div>` : ''}
       </div>
       <div class="screen">${innerHTML}</div>
       ${navActive ? `
       <div class="navbar">
         <button type="button" class="item ${navActive==='board'?'active':''}" data-nav="#/staff/board">Board</button>
         <button type="button" class="item ${navActive==='history'?'active':''}" data-nav="#/staff/history">Bookings</button>
-        ${canManage ? `<button type="button" class="item ${navActive==='organization'?'active':''}" data-nav="#/staff/organization">Manage</button>` : ''}
-        <div class="nav-more-wrap"><button type="button" class="item ${moreActive?'active':''}" data-menu-toggle aria-expanded="false" aria-controls="navMenu">More <span aria-hidden="true">☰</span></button><div class="nav-menu" id="navMenu" hidden>${isOwner ? `<div class="nav-menu-label">Insights</div><button type="button" data-nav="#/staff/overview">Overview</button><button type="button" data-nav="#/staff/analytics">Analytics</button><div class="nav-menu-divider"></div><div class="nav-menu-label">Account</div><button type="button" data-nav="#/staff/billing">Billing & subscription</button><div class="nav-menu-divider"></div>` : ''}${state.staff?.role === 'platform_owner' ? '<div class="nav-menu-label">Docket platform</div><button type="button" data-nav="#/staff/platform-admin">Providers & subscriptions</button><div class="nav-menu-divider"></div>' : ''}${canEditRules ? '<button type="button" data-nav="#/staff/settings">Settings</button>' : ''}<button type="button" data-signout="1">Sign out</button></div></div>
+        <div class="nav-more-wrap"><button type="button" class="item ${moreActive?'active':''}" data-menu-toggle aria-expanded="false" aria-controls="navMenu">More <span aria-hidden="true">☰</span></button><div class="nav-menu" id="navMenu" hidden>${canManage || canEditRules ? `<div class="nav-menu-label">Operations</div>${canManage ? '<button type="button" data-nav="#/staff/organization">Manage</button>' : ''}${canEditRules ? '<button type="button" data-nav="#/staff/settings">Settings</button>' : ''}<div class="nav-menu-divider"></div>` : ''}${isOwner ? `<div class="nav-menu-label">Insights</div><button type="button" data-nav="#/staff/overview">Overview</button><button type="button" data-nav="#/staff/analytics">Analytics</button><div class="nav-menu-divider"></div><div class="nav-menu-label">Account</div><button type="button" data-nav="#/staff/billing">Billing & subscription</button><div class="nav-menu-divider"></div>` : ''}${state.staff?.role === 'platform_owner' ? '<div class="nav-menu-label">Docket platform</div><button type="button" data-nav="#/staff/platform-admin">Providers & subscriptions</button><div class="nav-menu-divider"></div>' : ''}</div></div>
       </div>` : ''}
     </div>`;
 }
