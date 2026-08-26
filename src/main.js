@@ -1184,7 +1184,10 @@ function router() {
   boardRealtimeCleanup?.();
   boardRealtimeCleanup = null;
   const hash = location.hash || '#/';
-  (routes[hash.split('?')[0]] ?? pageStaffBoard)();
+  const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
+  const isRecoveryCallback = hashParams.has('access_token') && hashParams.get('type') === 'recovery';
+  const route = isRecoveryCallback || new URLSearchParams(location.search).has('staff_reset') ? '#/staff/reset-password' : hash.split('?')[0];
+  (routes[route] ?? pageStaffBoard)();
 }
 window.addEventListener('hashchange', router);
 router();

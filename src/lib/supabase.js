@@ -55,7 +55,10 @@ export async function signUpStaffWithPassword(email, password) {
 
 export async function sendStaffPasswordReset(email) {
   if (!supabase) throw new Error('Supabase Authentication is not configured.');
-  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: `${redirectUrl()}#/staff/reset-password` });
+  // Keep the recovery callback outside the hash router. Supabase returns the
+  // recovery tokens in the URL fragment, so nesting our route in the same
+  // fragment makes the router mistake the callback for a normal page visit.
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: `${redirectUrl()}?staff_reset=1` });
   if (error) throw error;
 }
 
@@ -90,6 +93,17 @@ export async function finishSupabaseRedirect() {
     url.searchParams.delete('state');
     window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
     return data.session?.user || null;
+  }
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const accessToken = hashParams.get('access_token');
+  const refreshToken = hashParams.get('refresh_token');
+  if (accessToken && refreshToken) {
+    const { data, error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+    if (error) throw error;
+    const route = hashParams.get('type') === 'recovery' || url.searchParams.has('staff_reset') ? '#/staff/reset-password' : '#/';
+    url.searchParams.delete('staff_reset');
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${route}`);
+    return data.user || null;
   }
   const { data, error } = await supabase.auth.getSession();
   if (error && error.name !== 'AuthSessionMissingError') throw error;
