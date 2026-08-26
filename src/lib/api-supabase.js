@@ -1,4 +1,4 @@
-import { supabase, supabaseConfigured, finishSupabaseRedirect, getSupabaseUser, signInStaffWithGoogle as supabaseGoogleSignIn, signOutSupabase, watchSupabaseUser, watchOperationalChanges as watchSupabaseOperationalChanges } from './supabase.js';
+import { supabase, supabaseConfigured, finishSupabaseRedirect, getSupabaseUser, signInStaffWithGoogle as supabaseGoogleSignIn, signInStaffWithPassword as supabasePasswordSignIn, signUpStaffWithPassword as supabasePasswordSignUp, sendStaffPasswordReset as supabasePasswordReset, updateStaffPassword as supabasePasswordUpdate, signOutSupabase, watchSupabaseUser, watchOperationalChanges as watchSupabaseOperationalChanges } from './supabase.js';
 
 export const DEFAULT_PROVIDER_ID = 'washpoint';
 export const DEFAULT_LOCATION_ID = 'washpoint-main';
@@ -170,6 +170,10 @@ export async function clearBayClosure(closureId) { const db = ensureSupabase(); 
 export async function bringBayUp(bayId) { const db = ensureSupabase(); const { data, error } = await db.from('bays').update({ status: 'open', updated_at: new Date().toISOString() }).eq('id', bayId).select().single(); errorOrThrow(error, 'bringing bay back up'); return data; }
 
 export async function signInStaff() { return supabaseGoogleSignIn(); }
+export async function signInStaffWithPassword(email, password) { return supabasePasswordSignIn(email, password); }
+export async function signUpStaffWithPassword(email, password) { return supabasePasswordSignUp(email, password); }
+export async function sendStaffPasswordReset(email) { return supabasePasswordReset(email); }
+export async function updateStaffPassword(password) { return supabasePasswordUpdate(password); }
 export async function getAuthUser() { return getSupabaseUser(); }
 export async function getCurrentStaff() { const user = await getSupabaseUser(); if (!user) return null; const db = ensureSupabase(); const { data, error } = await db.rpc('accept_staff_invitation'); errorOrThrow(error, 'loading current staff'); return data || null; }
 export async function signOutStaff() { return signOutSupabase(); }

@@ -25,6 +25,37 @@ export async function signInStaffWithGoogle() {
   return data;
 }
 
+export async function signInStaffWithPassword(email, password) {
+  if (!supabase) throw new Error('Supabase Authentication is not configured.');
+  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+  if (error) throw error;
+  return data;
+}
+
+export async function signUpStaffWithPassword(email, password) {
+  if (!supabase) throw new Error('Supabase Authentication is not configured.');
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim().toLowerCase(),
+    password,
+    options: { emailRedirectTo: redirectUrl() },
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function sendStaffPasswordReset(email) {
+  if (!supabase) throw new Error('Supabase Authentication is not configured.');
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: `${redirectUrl()}#/staff/reset-password` });
+  if (error) throw error;
+}
+
+export async function updateStaffPassword(password) {
+  if (!supabase) throw new Error('Supabase Authentication is not configured.');
+  const { data, error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
+  return data;
+}
+
 export async function getSupabaseUser() {
   if (!supabase) return null;
   const { data, error } = await supabase.auth.getUser();

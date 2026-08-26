@@ -71,10 +71,24 @@ async function pageStaffLogin() {
   app.innerHTML = shell('', `
     <div class="eyebrow">Staff sign in</div>
     <h2>Wash Point staff</h2>
-    <p class="lead">Use your authorized Google account to continue.</p>
-    <button class="btn" id="doSignIn">Sign in with Google</button>
+    <p class="lead">Use your staff email and password.</p>
+    <form id="staffPasswordForm"><div class="field"><label for="staffEmail">Email</label><input id="staffEmail" type="email" autocomplete="email" required></div><div class="field"><label for="staffPassword">Password</label><input id="staffPassword" type="password" autocomplete="current-password" minlength="8" required></div><button class="btn" id="doPasswordSignIn" type="submit">Sign in</button></form>
+    <button class="btn secondary" id="showStaffSignup" type="button">Set up staff account</button>
+    <div id="staffSignupPanel" hidden><p class="lead">Use the same email the owner invited. You can set a password after the invitation is created.</p><form id="staffSignupForm"><div class="field"><label for="signupEmail">Email</label><input id="signupEmail" type="email" autocomplete="email" required></div><div class="field"><label for="signupPassword">Create password</label><input id="signupPassword" type="password" autocomplete="new-password" minlength="8" required></div><button class="btn" type="submit">Create account</button></form></div>
+    <button class="btn secondary" id="showStaffReset" type="button">Forgot password?</button>
+    <div id="staffResetPanel" hidden><form id="staffResetForm"><div class="field"><label for="resetEmail">Email</label><input id="resetEmail" type="email" autocomplete="email" required></div><button class="btn" type="submit">Send reset email</button></form></div>
+    <div class="auth-divider"><span>or</span></div><button class="btn secondary" id="doSignIn">Continue with Google</button>
     <p class="lead" id="errMsg" style="display:none;color:#b3261e"></p>
   `);
+  document.getElementById('staffPasswordForm').onsubmit = async event => {
+    event.preventDefault();
+    const button = document.getElementById('doPasswordSignIn'); button.disabled = true;
+    try { const result = await api.signInStaffWithPassword(document.getElementById('staffEmail').value, document.getElementById('staffPassword').value); if (result?.user) { location.hash = '#/staff/board'; router(); } else throw new Error('Sign-in did not create a session.'); } catch (error) { const errEl = document.getElementById('errMsg'); errEl.textContent = error?.message || 'Could not sign in.'; errEl.style.display = 'block'; } finally { button.disabled = false; }
+  };
+  document.getElementById('showStaffSignup').onclick = () => { document.getElementById('staffSignupPanel').hidden = !document.getElementById('staffSignupPanel').hidden; };
+  document.getElementById('staffSignupForm').onsubmit = async event => { event.preventDefault(); const button = event.currentTarget.querySelector('button'); button.disabled = true; try { const result = await api.signUpStaffWithPassword(document.getElementById('signupEmail').value, document.getElementById('signupPassword').value); const errEl = document.getElementById('errMsg'); errEl.textContent = result?.session ? 'Account created. Signing you in…' : 'Account created. Check your email to verify it, then sign in.'; errEl.style.display = 'block'; } catch (error) { const errEl = document.getElementById('errMsg'); errEl.textContent = error?.message || 'Could not create the account.'; errEl.style.display = 'block'; } finally { button.disabled = false; } };
+  document.getElementById('showStaffReset').onclick = () => { document.getElementById('staffResetPanel').hidden = !document.getElementById('staffResetPanel').hidden; };
+  document.getElementById('staffResetForm').onsubmit = async event => { event.preventDefault(); try { await api.sendStaffPasswordReset(document.getElementById('resetEmail').value); alert('If that email is registered, a password reset link has been sent.'); } catch (error) { alert(error?.message || 'Could not send reset email.'); } };
   // Wire the button before checking for a previous redirect result. The
   // redirect check may wait while Firebase restores persistence; the visible
   // button must remain usable during that time.
@@ -149,7 +163,7 @@ async function requireStaff(myGen) {
     app.innerHTML = shell('', `
       <div class="eyebrow">Sign-in problem</div>
       <h2>We couldn't load your staff access</h2>
-      <p class="lead">Google sign-in succeeded, but the staff record could not be read. Please try again or ask the owner to check your staff access.</p>
+      <p class="lead">Your sign-in succeeded, but the staff record could not be read. Please try again or ask the owner to check your staff access.</p>
       <p class="lead" style="color:#b3261e">${h(error?.code || error?.message || 'Firebase access error')}</p>
       <button class="btn" id="retryStaff">Try again</button>
     `);
@@ -187,6 +201,21 @@ async function requireStaff(myGen) {
   }
   if (myGen !== renderGen) return null;
   return staff;
+}
+
+async function pageStaffPasswordReset() {
+  const myGen = ++renderGen;
+  try {
+    await api.finishStaffRedirect?.();
+    const user = await api.getAuthUser();
+    if (!user) { location.hash = '#/staff/login'; return; }
+    app.innerHTML = shell('', `<div class="eyebrow">Staff account</div><h2>Choose a new password</h2><p class="lead">Use at least 8 characters. You can then sign in normally.</p><form id="passwordResetForm"><div class="field"><label for="newStaffPassword">New password</label><input id="newStaffPassword" type="password" autocomplete="new-password" minlength="8" required></div><div class="field"><label for="confirmStaffPassword">Confirm password</label><input id="confirmStaffPassword" type="password" autocomplete="new-password" minlength="8" required></div><button class="btn" type="submit">Save new password</button><p id="passwordResetMessage" class="lead" role="status"></p></form>`);
+    document.getElementById('passwordResetForm').onsubmit = async event => { event.preventDefault(); const message = document.getElementById('passwordResetMessage'); const password = document.getElementById('newStaffPassword').value; if (password !== document.getElementById('confirmStaffPassword').value) { message.textContent = 'Passwords do not match.'; return; } try { await api.updateStaffPassword(password); message.textContent = 'Password updated. Opening your staff workspace…'; setTimeout(() => { location.hash = '#/staff/board'; router(); }, 500); } catch (error) { message.textContent = error?.message || 'Could not update your password.'; } };
+  } catch (error) {
+    if (myGen !== renderGen) return;
+    app.innerHTML = shell('', `<div class="eyebrow">Staff account</div><h2>Password link expired</h2><p class="lead">Request a new password-reset email and try again.</p><button class="btn" id="backToLogin" type="button">Back to sign in</button>`);
+    document.getElementById('backToLogin').onclick = () => { location.hash = '#/staff/login'; router(); };
+  }
 }
 
 // ── Staff pages ──────────────────────────────────────────────────────
@@ -1000,7 +1029,7 @@ async function pageStaffOrganization() {
   document.getElementById('addStaff')?.addEventListener('click', async event => {
     const email = document.getElementById('staffEmail').value.trim(); if (!email) return alert('Enter the staff email used for Google sign-in.');
     const button = event.currentTarget; const message = document.getElementById('staffMessage'); button.disabled = true; message.textContent = 'Saving staff access…';
-    try { const result = await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); message.textContent = result?.status === 'invited' ? 'Invitation saved. Staff can now sign in with Google.' : 'Staff access saved.'; refresh(); } catch (error) { message.textContent = `Could not save staff access: ${error?.message || 'Unknown error'}`; } finally { button.disabled = false; }
+    try { const result = await api.saveStaff({ email, name: document.getElementById('staffName').value, role: document.getElementById('staffRole').value }); message.textContent = result?.status === 'invited' ? 'Invitation saved. Staff can now create an email/password account.' : 'Staff access saved.'; refresh(); } catch (error) { message.textContent = `Could not save staff access: ${error?.message || 'Unknown error'}`; } finally { button.disabled = false; }
   });
   document.getElementById('addProvider')?.addEventListener('click', async () => {
     try { const name = document.getElementById('newProviderName').value.trim(); if (!name) return alert('Enter a provider name.'); await api.createProvider({ name }); state.tenants = await api.getAccessibleTenants(staff); refresh(); } catch (error) { showManageError(error); }
@@ -1103,6 +1132,7 @@ const routes = {
   '#/': pageCustomerLanding,
   '#/book': pageCustomerBook,
   '#/staff/login': pageStaffLogin,
+  '#/staff/reset-password': pageStaffPasswordReset,
   '#/staff/board': pageStaffBoard,
   '#/staff/overview': pageStaffOverview,
   '#/staff/analytics': pageStaffAnalytics,
