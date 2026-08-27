@@ -103,7 +103,7 @@ export async function availableSupabaseSlots(context: BookingContext, tenant: Te
 }
 
 export async function reserveSupabaseAppointment(threadId: string, state: Tier1State, tenant: Tenant, channel: "telegram" | "web" = "telegram"): Promise<{ status: "created" | "existing"; reference: string; service: Service } | { status: "unavailable"; reference: string }> {
-  if (!state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone) return { status: "unavailable", reference: "" };
+  if (!state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone || !state.vehiclePlate || !state.vehicleMakeModel) return { status: "unavailable", reference: "" };
   const db = client();
   const requestId = state.bookingRequestId || createHash("sha256").update([tenant.providerId, tenant.locationId, threadId, state.serviceId, state.dateIso, state.time24h].join("|")).digest("hex").slice(0, 32);
   const reference = `WP-T1-${state.dateIso.replaceAll("-", "")}-${requestId.slice(0, 6).toUpperCase()}`;
@@ -114,6 +114,8 @@ export async function reserveSupabaseAppointment(threadId: string, state: Tier1S
     p_customer_chat_id: threadId,
     p_customer_name: state.customerName,
     p_customer_phone: state.customerPhone,
+    p_vehicle_plate: state.vehiclePlate,
+    p_vehicle_make_model: state.vehicleMakeModel,
     p_channel: channel,
     p_service_id: state.serviceId,
     p_scheduled_date: state.dateIso,
@@ -134,12 +136,21 @@ export async function reserveSupabaseAppointment(threadId: string, state: Tier1S
 }
 
 function normalizePhone(value: string) { return value.replace(/[\s-]/g, "").replace(/^\+/, ""); }
+function normalizeText(value: string) { return value.trim().toLocaleLowerCase(); }
+function normalizePlate(value: string) { return value.replace(/[\s-]/g, "").toLocaleUpperCase(); }
 
-async function publicBookingRow(reference: string, phone: string) {
+async function publicBookingRow({ reference, phone, name, vehiclePlate }: { reference: string; phone: string; name: string; vehiclePlate: string }) {
   const db = client();
-  const { data: appointment, error } = await db.from("appointments").select("*").eq("reference", reference.trim()).maybeSingle();
+  if (reference.trim()) {
+    const { data: appointment, error } = await db.from("appointments").select("*").eq("reference", reference.trim()).maybeSingle();
+    fail(error, "finding booking");
+    if (!appointment) throw new Error("We could not find that booking reference.");
+    return appointment;
+  }
+  const { data: candidates, error } = await db.from("appointments").select("*").eq("vehicle_plate", vehiclePlate.trim()).limit(25);
   fail(error, "finding booking");
-  if (!appointment || normalizePhone(String(appointment.customer_phone || "")) !== normalizePhone(phone)) throw new Error("We could not find a booking with that reference and phone number.");
+  const appointment = (candidates || []).find(item => normalizePhone(String(item.customer_phone || "")) === normalizePhone(phone) && normalizeText(String(item.customer_name || "")) === normalizeText(name) && normalizePlate(String(item.vehicle_plate || "")) === normalizePlate(vehiclePlate));
+  if (!appointment) throw new Error("We could not find a booking with those customer and vehicle details.");
   return appointment;
 }
 
@@ -150,7 +161,7 @@ async function publicBookingDetails(appointment: Row) {
     db.from("locations").select("id,name,address").eq("id", appointment.location_id).maybeSingle(),
   ]);
   fail(serviceError, "loading booking service"); fail(locationError, "loading booking location");
-  return { reference: appointment.reference, status: appointment.status, customer_name: appointment.customer_name, customer_phone: appointment.customer_phone, provider_id: appointment.provider_id, location_id: appointment.location_id, bay_id: appointment.bay_id, scheduled_date: appointment.scheduled_date, scheduled_at: appointment.scheduled_at, duration_minutes: appointment.duration_minutes, price_myr: appointment.price_myr, service, location };
+  return { reference: appointment.reference, status: appointment.status, customer_name: appointment.customer_name, customer_phone: appointment.customer_phone, vehicle_plate: appointment.vehicle_plate, vehicle_make_model: appointment.vehicle_make_model, provider_id: appointment.provider_id, location_id: appointment.location_id, bay_id: appointment.bay_id, scheduled_date: appointment.scheduled_date, scheduled_at: appointment.scheduled_at, duration_minutes: appointment.duration_minutes, price_myr: appointment.price_myr, service, location };
 }
 
 async function choosePublicBay(context: BookingContext, tenant: Tenant, appointment: Row, dateIso: string, time: string) {
@@ -172,9 +183,9 @@ async function choosePublicBay(context: BookingContext, tenant: Tenant, appointm
   });
 }
 
-export async function managePublicBooking({ reference, phone, action, dateIso, time }: { reference: string; phone: string; action: "lookup" | "cancel" | "reschedule"; dateIso?: string; time?: string }) {
+export async function managePublicBooking({ reference, phone, name = "", vehiclePlate = "", action, dateIso, time }: { reference: string; phone: string; name?: string; vehiclePlate?: string; action: "lookup" | "cancel" | "reschedule"; dateIso?: string; time?: string }) {
   const db = client();
-  const appointment = await publicBookingRow(reference, phone);
+  const appointment = await publicBookingRow({ reference, phone, name, vehiclePlate });
   if (action === "lookup") return publicBookingDetails(appointment);
   if (appointment.status === "cancelled") throw new Error("This booking has already been cancelled.");
   const start = asMillis(appointment.scheduled_at);

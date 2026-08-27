@@ -15,6 +15,8 @@ create or replace function public.reserve_appointment_atomic(
   p_customer_chat_id text,
   p_customer_name text,
   p_customer_phone text,
+  p_vehicle_plate text,
+  p_vehicle_make_model text,
   p_channel text,
   p_service_id uuid,
   p_scheduled_date date,
@@ -168,12 +170,12 @@ begin
     ) then
       insert into appointments (
         provider_id, location_id, booking_request_id, customer_chat_id,
-        customer_name, customer_phone, channel, bay_id, service_id,
+        customer_name, customer_phone, vehicle_plate, vehicle_make_model, channel, bay_id, service_id,
         scheduled_at, scheduled_date, duration_minutes, price_myr, status,
         reference
       ) values (
         p_provider_id, p_location_id, p_booking_request_id, p_customer_chat_id,
-        p_customer_name, p_customer_phone, p_channel, v_bay.id, v_service.id,
+        p_customer_name, p_customer_phone, p_vehicle_plate, p_vehicle_make_model, p_channel, v_bay.id, v_service.id,
         v_start, p_scheduled_date, v_service.duration_minutes, v_service.price_myr,
         'confirmed', p_reference
       );
@@ -191,8 +193,8 @@ begin
 end;
 $$;
 
-revoke execute on function public.reserve_appointment_atomic(text, text, text, text, text, text, text, uuid, date, text, text) from public, anon, authenticated;
-grant execute on function public.reserve_appointment_atomic(text, text, text, text, text, text, text, uuid, date, text, text) to service_role;
+revoke execute on function public.reserve_appointment_atomic(text, text, text, text, text, text, text, text, text, uuid, date, text, text) from public, anon, authenticated;
+grant execute on function public.reserve_appointment_atomic(text, text, text, text, text, text, text, text, text, uuid, date, text, text) to service_role;
 
 -- Atomic appointment move for staff and customer self-service.
 -- The database lock covers both the original day and the destination day, so

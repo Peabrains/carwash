@@ -8,7 +8,7 @@ import { bookingIntervalsOverlap, intervalsOverlap, isDateBookable } from "./boo
 import { availableSupabaseSlots, loadSupabaseBookingContext, reserveSupabaseAppointment, supabaseConfigured } from "./supabase-booking.js";
 
 export type Tier1State = {
-  step: "service" | "date" | "time" | "name" | "phone" | "confirm" | "submitting" | "completed";
+  step: "service" | "date" | "time" | "name" | "phone" | "plate" | "vehicle" | "confirm" | "submitting" | "completed";
   serviceId?: string;
   serviceName?: string;
   durationMinutes?: number;
@@ -17,6 +17,8 @@ export type Tier1State = {
   time24h?: string;
   customerName?: string;
   customerPhone?: string;
+  vehiclePlate?: string;
+  vehicleMakeModel?: string;
   bookingRequestId?: string;
   lastActiveAt?: string;
 };
@@ -195,7 +197,7 @@ type ReservationResult =
   | { status: "unavailable" };
 
 export async function reserveFirestoreAppointment(threadId: string, state: Tier1State): Promise<ReservationResult> {
-  if (!firestore || !state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone) {
+  if (!firestore || !state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone || !state.vehiclePlate || !state.vehicleMakeModel) {
     return { status: "unavailable" };
   }
   const db = firestore;
@@ -313,6 +315,8 @@ export async function reserveFirestoreAppointment(threadId: string, state: Tier1
       customer_chat_id: threadId,
       customer_name: customerName,
       customer_phone: customerPhone,
+      vehicle_plate: state.vehiclePlate,
+      vehicle_make_model: state.vehicleMakeModel,
       channel: "telegram",
       bay_id: bay.id,
       service_id: service.id,
@@ -329,7 +333,7 @@ export async function reserveFirestoreAppointment(threadId: string, state: Tier1
 }
 
 async function confirmTier1(thread: Thread, c: BookingContext, state: Tier1State) {
-  if ((!firestore && !useSupabase) || !state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone) return thread.post("I still need your name and Malaysian phone number before confirming.");
+  if ((!firestore && !useSupabase) || !state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone || !state.vehiclePlate || !state.vehicleMakeModel) return thread.post("I still need your name, phone number, car plate and car make/model before confirming.");
   await thread.setState({ ...state, step: "submitting", lastActiveAt: new Date().toISOString() });
   const reservation = useSupabase
     ? await reserveSupabaseAppointment(thread.id, state, { providerId, locationId })
@@ -347,7 +351,9 @@ export async function handleTier1Text(thread: Thread, text: string) {
   const state = ((await thread.state) as Tier1State | null) ?? { step: "service" };
   if (/^\/(start|restart|new)$/i.test(text.trim())) return startTier1(thread);
   if (state.step === "name") { await thread.setState({ ...state, step: "phone", customerName: text.trim(), lastActiveAt: new Date().toISOString() }); return thread.post("Please type your Malaysian mobile number, e.g. 012-3456789."); }
-  if (state.step === "phone") { const value = phone(text); if (!value) return thread.post("That doesn't look like a Malaysian mobile number. Please send it again, e.g. 012-3456789."); const next = { ...state, step: "confirm" as const, customerPhone: value, lastActiveAt: new Date().toISOString() }; await thread.setState(next); return thread.post(menu("Review booking", `${state.serviceName}\n${formatDate(state.dateIso!)} at ${state.time24h}\n${state.customerName}\n${value}\nRM${state.priceMyr}`, [{ id: "t1_confirm", label: "Confirm", value: "yes" }, { id: "t1_restart", label: "Start over" }])); }
+  if (state.step === "phone") { const value = phone(text); if (!value) return thread.post("That doesn't look like a Malaysian mobile number. Please send it again, e.g. 012-3456789."); await thread.setState({ ...state, step: "plate", customerPhone: value, lastActiveAt: new Date().toISOString() }); return thread.post("Please type your car plate number, e.g. ABC 1234."); }
+  if (state.step === "plate") { const value = text.trim(); if (value.length < 2) return thread.post("Please send the car plate number, e.g. ABC 1234."); await thread.setState({ ...state, step: "vehicle", vehiclePlate: value, lastActiveAt: new Date().toISOString() }); return thread.post("Please type your car make and model, e.g. Perodua Myvi."); }
+  if (state.step === "vehicle") { const value = text.trim(); if (value.length < 2) return thread.post("Please send the car make and model, e.g. Perodua Myvi."); const next = { ...state, step: "confirm" as const, vehicleMakeModel: value, lastActiveAt: new Date().toISOString() }; await thread.setState(next); return thread.post(menu("Review booking", `${state.serviceName}\n${formatDate(state.dateIso!)} at ${state.time24h}\n${state.customerName}\n${state.customerPhone}\n${state.vehiclePlate}\n${value}\nRM${state.priceMyr}`, [{ id: "t1_confirm", label: "Confirm", value: "yes" }, { id: "t1_restart", label: "Start over" }])); }
   if (state.step === "confirm") { if (isYes(text)) return confirmTier1(thread, await loadBookingContext(), state); if (isNo(text)) return startTier1(thread); return thread.post("Please reply Confirm or Start over."); }
   return thread.post("Please use the buttons above, or send /start to begin.");
 }

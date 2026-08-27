@@ -59,6 +59,7 @@ create table appointments (
   customer_phone text,
   channel text not null default 'telegram' check (channel in ('telegram','whatsapp')),
   vehicle_plate text,
+  vehicle_make_model text,
   bay_id uuid not null references bays(id),
   service_id uuid not null references services(id),
   scheduled_at timestamptz not null,
