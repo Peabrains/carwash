@@ -24,6 +24,7 @@ const app = document.getElementById('app');
 const state = { staff: null, tenants: { providers: [], locations: [] } };
 const h = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const formatRole = role => String(role || 'staff').split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()).join(' ');
+const staffInitials = staff => String(staff?.name || staff?.email || 'S').split(/[^a-z0-9]+/i).filter(Boolean).slice(0, 2).map(part => part[0].toUpperCase()).join('') || 'S';
 
 // Every navigation (route change, date click, settings save, etc.) bumps
 // this. Async page renders check it before touching the DOM, so a slow
@@ -54,7 +55,7 @@ function shell(navActive, innerHTML) {
       <div class="topbar">
         <div class="brand"><div class="drop"></div>Docket</div>
         ${navActive && tenantOptions ? `<div class="tenant-picker"><span>${h(currentProvider?.name || '')}</span><select id="tenantSelect" aria-label="Active location">${tenantOptions}</select></div>` : ''}
-        ${navActive && state.staff ? `<div class="staff-account"><div class="staff-identity"><strong>${h(state.staff.name || state.staff.email || 'Staff')}</strong><span>${h(formatRole(state.staff.role))}</span></div><button type="button" class="staff-signout" data-signout="1">Sign out</button></div>` : ''}
+        ${navActive && state.staff ? `<div class="staff-profile"><button type="button" class="profile-trigger" data-profile-toggle aria-expanded="false" aria-controls="staffProfileDrawer" aria-label="Open account menu"><span>${h(staffInitials(state.staff))}</span></button><div class="profile-scrim" data-profile-close></div><aside class="profile-drawer" id="staffProfileDrawer" aria-hidden="true"><div class="profile-drawer-head"><div class="profile-avatar">${h(staffInitials(state.staff))}</div><div><strong>${h(state.staff.name || 'Staff')}</strong><span>${h(state.staff.email || '')}</span><small>${h(formatRole(state.staff.role))}</small></div><button type="button" class="profile-close" data-profile-close aria-label="Close account menu">×</button></div><div class="profile-drawer-section"><span class="profile-label">Active outlet</span><strong>${h(currentProvider?.name || '')}</strong><span>${h(currentLocation?.name || '')}</span></div><div class="profile-drawer-links">${canEditRules ? '<button type="button" data-nav="#/staff/settings">Account settings</button>' : ''}<button type="button" data-focus-tenant data-profile-close>Switch outlet</button><button type="button" class="profile-signout" data-signout="1">Sign out</button></div></aside></div>` : ''}
       </div>
       <div class="screen">${innerHTML}</div>
       ${navActive ? `
@@ -1149,6 +1150,28 @@ function wireNav() {
     if (!menu) return;
     menu.hidden = !menu.hidden;
     el.setAttribute('aria-expanded', String(!menu.hidden));
+  });
+  const closeProfile = () => {
+    const drawer = document.getElementById('staffProfileDrawer');
+    const trigger = document.querySelector('[data-profile-toggle]');
+    drawer?.classList.remove('open');
+    document.querySelector('.profile-scrim')?.classList.remove('open');
+    trigger?.setAttribute('aria-expanded', 'false');
+    drawer?.setAttribute('aria-hidden', 'true');
+  };
+  document.querySelectorAll('[data-profile-toggle]').forEach(el => el.onclick = () => {
+    const drawer = document.getElementById(el.getAttribute('aria-controls'));
+    const scrim = document.querySelector('.profile-scrim');
+    if (!drawer || !scrim) return;
+    const open = !drawer.classList.contains('open');
+    drawer.classList.toggle('open', open);
+    scrim.classList.toggle('open', open);
+    el.setAttribute('aria-expanded', String(open));
+    drawer.setAttribute('aria-hidden', String(!open));
+  });
+  document.querySelectorAll('[data-profile-close]').forEach(el => el.onclick = closeProfile);
+  document.querySelector('[data-focus-tenant]')?.addEventListener('click', () => {
+    setTimeout(() => document.getElementById('tenantSelect')?.focus(), 0);
   });
   const tenantSelect = document.getElementById('tenantSelect');
   if (tenantSelect) tenantSelect.onchange = () => {

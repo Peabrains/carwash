@@ -81,12 +81,28 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .navbar .item:hover{background:rgba(216,230,109,.35);color:#12343A;}
 .navbar .item.active{color:#17363B;background:linear-gradient(145deg,rgba(229,239,145,.92),rgba(199,218,83,.72));transform:translateY(-3px);box-shadow:0 6px 16px rgba(137,158,52,.34),inset 0 1px 1px rgba(255,255,255,.78);animation:glass-nav-pop .38s cubic-bezier(.2,.85,.25,1.25);}
 .navbar .item:active{transform:scale(.95);}
-.staff-account{display:flex;align-items:center;gap:10px;min-width:0;justify-self:end;}
-.staff-identity{display:grid;gap:2px;min-width:0;text-align:right;}
-.staff-identity strong{max-width:180px;overflow:hidden;color:#F7F8EF;font-size:11px;line-height:1.1;text-overflow:ellipsis;white-space:nowrap;}
-.staff-identity span{color:#BFD0C9;font-size:9px;letter-spacing:.05em;text-transform:capitalize;}
-.staff-signout{border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:7px 10px;background:rgba(255,255,255,.08);color:#F7F8EF;font:600 10px inherit;cursor:pointer;white-space:nowrap;}
-.staff-signout:hover{background:rgba(255,255,255,.18);}
+.staff-profile{justify-self:end;position:relative;z-index:30;}
+.profile-trigger{display:grid;place-items:center;width:34px;height:34px;border:1px solid rgba(255,255,255,.55);border-radius:50%;background:#D8E66D;color:#12343A;font:700 10px inherit;cursor:pointer;}
+.profile-trigger:hover{background:#E5EF91;}
+.profile-scrim{display:none;position:fixed;inset:0;background:rgba(18,52,58,.38);z-index:40;}
+.profile-scrim.open{display:block;}
+.profile-drawer{position:fixed;top:0;right:0;bottom:0;width:min(340px,88vw);padding:22px 18px;background:#FCFCF8;color:#12343A;box-shadow:-16px 0 36px rgba(18,52,58,.22);transform:translateX(105%);transition:transform .24s ease;z-index:50;}
+.profile-drawer.open{transform:translateX(0);}
+.profile-drawer-head{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:start;gap:11px;padding-bottom:18px;border-bottom:1px solid #D2DDD5;}
+.profile-avatar{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:#D8E66D;color:#12343A;font-weight:800;}
+.profile-drawer-head strong,.profile-drawer-head span,.profile-drawer-head small{display:block;overflow-wrap:anywhere;}
+.profile-drawer-head strong{font-size:14px;line-height:1.25;}
+.profile-drawer-head span{margin-top:3px;color:#61736F;font-size:11px;}
+.profile-drawer-head small{margin-top:5px;color:#28705E;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;}
+.profile-close{border:0;background:transparent;color:#12343A;font-size:24px;line-height:1;cursor:pointer;}
+.profile-drawer-section{display:grid;gap:4px;padding:18px 0;border-bottom:1px solid #D2DDD5;}
+.profile-drawer-section strong{font-size:15px;}
+.profile-drawer-section>span:last-child{color:#61736F;font-size:12px;}
+.profile-label{color:#28705E;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
+.profile-drawer-links{display:grid;gap:8px;margin-top:18px;}
+.profile-drawer-links button{padding:12px;border:1px solid #D2DDD5;border-radius:10px;background:#F4F6F0;color:#12343A;text-align:left;font:600 12px inherit;cursor:pointer;}
+.profile-drawer-links button:hover{background:#EEF7F1;border-color:#B9D8C7;}
+.profile-drawer-links .profile-signout{border-color:#D98B83;background:#FFF0EE;color:#A52624;}
 .nav-more-wrap{position:relative;flex:1;min-width:0;}
 .nav-more-wrap>.item{width:100%;}
 .nav-menu{position:absolute;right:0;bottom:calc(100% + 10px);display:grid;min-width:170px;padding:7px;border:1px solid rgba(255,255,255,.9);border-radius:15px;background:rgba(252,252,248,.94);box-shadow:0 14px 30px rgba(18,52,58,.2);backdrop-filter:blur(24px) saturate(1.5);-webkit-backdrop-filter:blur(24px) saturate(1.5);}
@@ -552,10 +568,7 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
   .screen{padding-left:16px;padding-right:16px;}
   .topbar{grid-template-columns:auto minmax(0,1fr) auto;padding:11px 12px;gap:8px;}
   .topbar .brand{font-size:13px;}
-  .staff-account{gap:6px;}
-  .staff-identity strong{max-width:96px;font-size:9px;}
-  .staff-identity span{font-size:8px;}
-  .staff-signout{padding:6px 8px;font-size:9px;}
+  .profile-trigger{width:32px;height:32px;}
   .tenant-picker{max-width:100%;padding-left:8px;justify-self:stretch;}
   .tenant-picker>span{font-size:11px;}
   .tenant-picker select{font-size:13px;text-align:left;}
