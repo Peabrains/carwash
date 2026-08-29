@@ -37,7 +37,7 @@ function firebaseDb() {
 const firestore = firebaseDb();
 const providerId = process.env.TIER1_PROVIDER_ID || "washpoint";
 const locationId = process.env.TIER1_LOCATION_ID || "washpoint-main";
-const useSupabase = process.env.BOOKING_DATA_BACKEND === "supabase";
+const useSupabase = true;
 const fallback: Settings = { min_lead_minutes: 60, max_advance_days: 14, buffer_minutes: 15, weekday_open: "08:00", weekday_close: "19:00", weekend_open: "08:00", weekend_close: "21:00" };
 
 function localDate(date = new Date()) { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuala_Lumpur", year: "numeric", month: "2-digit", day: "2-digit" }).format(date); }

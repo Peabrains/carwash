@@ -1,15 +1,14 @@
 # Docket / WashPoint
 
-Firebase-backed car-wash operations and booking platform. WashPoint is the first tenant; the Phase 1 foundation allows the same deployment to house additional providers and locations safely.
+Supabase-backed car-wash marketplace and operations platform. WashPoint is the first tenant; the multi-provider foundation allows the same deployment to house additional providers and locations safely.
 
 ## Live components
 
-- Staff PWA: Firebase Hosting, Vite and vanilla JavaScript
-- Authentication: Firebase Authentication with Google sign-in
-- Operational database: Cloud Firestore
+- Staff/customer PWA: GitHub Pages, Vite and vanilla JavaScript
+- Authentication and operational database: Supabase Auth and Postgres
 - Customer booking: Tier1 Telegram bot on Vercel
-- Bot session state: Firestore, surviving deployments and server restarts
-- Trusted server access: Firebase Admin credentials stored only in Vercel
+- Bot session state: Supabase Postgres, surviving deployments and server restarts
+- Trusted server access: Supabase service-role credentials stored only in Vercel
 
 ## Tenant model
 
@@ -20,7 +19,7 @@ Every operational record contains both `provider_id` and `location_id`:
 - `staff/{email}` — role and provider/location access
 - `services`, `bays`, `booking_settings`, `appointments`, `blackout_dates`, `bay_closures`, and `crew_break_schedule` — location-scoped operations
 - `booking_day_locks` — server transaction locks that serialize competing bookings for a bay/day
-- `chat_*` — Firebase Admin-only durable Chat SDK state
+- `chat_*` — server-only durable Chat SDK state
 
 Legacy WashPoint data uses `washpoint` and `washpoint-main`. Staff records without explicit tenant IDs are treated as legacy WashPoint staff during migration.
 
@@ -45,7 +44,7 @@ npm install
 npm run dev
 ```
 
-Copy `.env.example` to `.env` and fill in the Firebase web configuration. Without it, the UI uses local mock catalogue data.
+Copy `.env.example` to `.env` and fill in the Supabase URL and publishable key.
 
 Bot development lives in `bot-ts`:
 
@@ -55,11 +54,11 @@ npm --prefix bot-ts test
 npm --prefix bot-ts run typecheck
 ```
 
-The Vercel bot requires `FIREBASE_SERVICE_ACCOUNT_JSON`, Telegram credentials, and `TIER1_PROVIDER_ID` / `TIER1_LOCATION_ID`. `APPOINTMENTS_API_SECRET` protects the private server booking endpoint.
+The Vercel bot requires Supabase server credentials, Telegram credentials, and `TIER1_PROVIDER_ID` / `TIER1_LOCATION_ID`.
 
 ## Switching Supabase accounts/projects
 
-The live app currently runs on Firebase. Supabase is being kept as a migration target, so its credentials are isolated from the working Firebase `.env`.
+Supabase is the production source of truth for authentication, catalogue, availability, bookings, operations, and platform administration.
 
 Create one local profile per Supabase account/project:
 
@@ -79,7 +78,7 @@ node scripts/supabase-profile.mjs use account-a
 node scripts/supabase-profile.mjs run account-b -- supabase projects list
 ```
 
-`use` creates `.env.supabase.active` for local tooling only; it does not change the Firebase `.env`. `run` is safer for one-off migration commands because the selected profile is passed only to that command. Account login itself remains separate: if the two projects belong to different Supabase accounts, complete the Supabase OAuth login for the intended account before using its dashboard or connector.
+`use` creates `.env.supabase.active` for local tooling only. `run` is safer for one-off commands because the selected profile is passed only to that command.
 
 ## Booking guarantees
 
@@ -87,4 +86,4 @@ Confirmation runs in a Firestore transaction. It re-reads the live service, sett
 
 ## Legacy archive
 
-The `bot/` Python prototype and `supabase/schema.sql` are retained as historical migration references only. They are not part of the Firebase/Vercel production runtime.
+The `bot/` Python prototype and migration scripts are retained as historical references only. The production runtime uses Supabase, GitHub Pages, and Vercel.

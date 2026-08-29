@@ -4,7 +4,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import type { GatewayProviderOptions } from "@ai-sdk/gateway";
 import { bookingModel } from "./model.js";
-import { availableSlots, loadBookingContext, reserveFirestoreAppointment, type BookingContext, type Service, type Settings } from "./tier1-flow.js";
+import { availableSlots, loadBookingContext, type BookingContext, type Service, type Settings } from "./tier1-flow.js";
 import { reserveSupabaseAppointment } from "./supabase-booking.js";
 
 type Turn = { role: "user" | "assistant"; content: string };
@@ -43,9 +43,7 @@ async function submitBooking(state: SafeBookingState, context: BookingContext, c
   if(!state.serviceName||!state.dateIso||!state.time24h||!state.customerName||!state.customerPhone||!state.vehiclePlate||!state.vehicleMakeModel)return "I still need the complete booking details, including car plate and make/model, before submitting.";
   const service=serviceFor(state.serviceName,context.services); if(!service)return "I couldn't match that service to the live catalogue.";
   const bookingState = { step: "confirm" as const, bookingRequestId: state.bookingRequestId, serviceId: service.id, serviceName: service.name, durationMinutes: service.duration_minutes, priceMyr: service.price_myr, dateIso: state.dateIso, time24h: state.time24h, customerName: state.customerName, customerPhone: state.customerPhone, vehiclePlate: state.vehiclePlate, vehicleMakeModel: state.vehicleMakeModel };
-  const result = process.env.BOOKING_DATA_BACKEND === "supabase"
-    ? await reserveSupabaseAppointment(chatId, bookingState, { providerId: process.env.TIER1_PROVIDER_ID || "washpoint", locationId: process.env.TIER1_LOCATION_ID || "washpoint-main" })
-    : await reserveFirestoreAppointment(chatId, bookingState);
+  const result = await reserveSupabaseAppointment(chatId, bookingState, { providerId: process.env.TIER1_PROVIDER_ID || "washpoint", locationId: process.env.TIER1_LOCATION_ID || "washpoint-main" });
   if(result.status === "unavailable") return "That slot is no longer available. Please choose another time.";
   return (result.status === "existing" ? "Already confirmed — " : "Confirmed — ")+service.name+" on "+state.dateIso+" at "+state.time24h+". Your reference is "+result.reference+".";
 }

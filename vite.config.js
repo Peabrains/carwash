@@ -10,9 +10,7 @@ export default defineConfig({
       selfDestroying: true,
       registerType: 'autoUpdate',
       workbox: {
-        // Firebase Authentication owns this reserved path. Never let the
-        // PWA navigation fallback replace its OAuth handler with index.html.
-        navigateFallbackDenylist: [/^\/__\/auth\//]
+        navigateFallbackDenylist: []
       },
       manifest: {
         name: 'Wash Point',

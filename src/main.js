@@ -89,7 +89,7 @@ async function pageStaffLogin() {
   document.getElementById('showStaffReset').onclick = () => { document.getElementById('staffResetPanel').hidden = !document.getElementById('staffResetPanel').hidden; };
   document.getElementById('staffResetForm').onsubmit = async event => { event.preventDefault(); try { await api.sendStaffPasswordReset(document.getElementById('resetEmail').value); alert('If that email is registered, a password reset link has been sent.'); } catch (error) { alert(error?.message || 'Could not send reset email.'); } };
   // Wire the button before checking for a previous redirect result. The
-  // redirect check may wait while Firebase restores persistence; the visible
+  // redirect check may wait while Supabase restores persistence; the visible
   // button must remain usable during that time.
   document.getElementById('doSignIn').onclick = async () => {
     const errEl = document.getElementById('errMsg');
@@ -163,7 +163,7 @@ async function requireStaff(myGen) {
       <div class="eyebrow">Sign-in problem</div>
       <h2>We couldn't load your staff access</h2>
       <p class="lead">Your sign-in succeeded, but the staff record could not be read. Please try again or ask the owner to check your staff access.</p>
-      <p class="lead" style="color:#b3261e">${h(error?.code || error?.message || 'Firebase access error')}</p>
+      <p class="lead" style="color:#b3261e">${h(error?.code || error?.message || 'Supabase access error')}</p>
       <button class="btn" id="retryStaff">Try again</button>
     `);
     document.getElementById('retryStaff').onclick = () => router();
@@ -191,8 +191,8 @@ async function requireStaff(myGen) {
     app.innerHTML = shell('', `
       <div class="eyebrow">Dashboard loading problem</div>
       <h2>Your account is signed in</h2>
-      <p class="lead">Firebase authentication succeeded, but the staff workspace data could not be loaded.</p>
-      <p class="lead" style="color:#b3261e">${h(error?.code || error?.message || 'Firebase data access error')}</p>
+      <p class="lead">Supabase authentication succeeded, but the staff workspace data could not be loaded.</p>
+      <p class="lead" style="color:#b3261e">${h(error?.code || error?.message || 'Supabase data access error')}</p>
       <button class="btn" id="retryWorkspace">Try again</button>
     `);
     document.getElementById('retryWorkspace').onclick = () => router();
@@ -386,7 +386,7 @@ async function pageStaffBoard(dateISO) {
       <div class="eyebrow">Board loading problem</div>
       <h2>Staff access is working</h2>
       <p class="lead">The dashboard could not load its booking data.</p>
-      <p class="lead" style="color:#b3261e">${h(error?.code || error?.message || 'Firebase data access error')}</p>
+      <p class="lead" style="color:#b3261e">${h(error?.code || error?.message || 'Supabase data access error')}</p>
       <button class="btn" id="retryBoard">Try again</button>
     `);
     wireNav();

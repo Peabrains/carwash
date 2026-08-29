@@ -1,7 +1,7 @@
 import "./env.js";
 import { Chat, type Thread } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
-import { createFirestoreState } from "./firestore-state.js";
+import { createSupabaseState } from "./supabase-state.js";
 import { handleTier1Action, handleTier1Text, startTier1, startTier1Channel } from "./tier1-flow.js";
 
 const token = process.env.TIER1_TELEGRAM_BOT_TOKEN;
@@ -11,7 +11,7 @@ const telegram = createTelegramAdapter({ botToken: token, secretToken: process.e
 export const tier1Bot = new Chat({
   userName: "washpoint_tier1",
   adapters: { telegram },
-  state: createFirestoreState(),
+  state: createSupabaseState(),
   onLockConflict: "drop",
 });
 

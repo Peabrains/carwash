@@ -1,7 +1,7 @@
 import "./env.js";
 import { Chat } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
-import { createFirestoreState } from "./firestore-state.js";
+import { createSupabaseState } from "./supabase-state.js";
 import { respondToCustomer, type SafeBookingState } from "./booking-agent.js";
 import { transcribeAttachments } from "./transcription.js";
 import { managePublicBooking } from "./supabase-booking.js";
@@ -30,7 +30,7 @@ function managementSummary(booking: any) {
 export const bot = new Chat({
   userName: "washpoint",
   adapters: { telegram },
-  state: createFirestoreState(),
+  state: createSupabaseState(),
   onLockConflict: "drop",
 });
 
