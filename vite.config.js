@@ -1,7 +1,10 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-const base = process.env.GITHUB_ACTIONS === 'true' ? '/carwash/' : '/';
+// The production site uses the custom domain at the origin root. Keep the
+// project-page fallback for preview deployments, while allowing the Pages
+// workflow to build with the root base path.
+const base = process.env.VITE_BASE_PATH || (process.env.GITHUB_ACTIONS === 'true' ? '/carwash/' : '/');
 
 export default defineConfig({
   base,
