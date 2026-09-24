@@ -1,9 +1,8 @@
 import "./env.js";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { Channel, Thread } from "chat";
 import { Actions, Button, Card, CardText } from "chat";
-import { bookingIntervalsOverlap, intervalsOverlap, isDateBookable } from "./booking-rules.js";
-import { availableSupabaseSlots, loadSupabaseBookingContext, publicSupabaseClient, reserveSupabaseAppointment, supabaseConfigured } from "./supabase-booking.js";
+import { availableSupabaseSlots, loadSupabaseBookingContext, publicSupabaseClient, reserveSupabaseAppointment } from "./supabase-booking.js";
 
 export type Tier1State = {
   step: "provider" | "location" | "service" | "date" | "time" | "name" | "phone" | "plate" | "vehicle" | "confirm" | "submitting" | "completed";
@@ -30,19 +29,7 @@ export type Service = TenantScoped & { id: string; name: string; duration_minute
 export type Settings = { min_lead_minutes: number; max_advance_days: number; buffer_minutes: number; weekday_open: string; weekday_close: string; weekend_open: string; weekend_close: string };
 export type BookingContext = { services: Service[]; settings: Settings };
 
-// Booking runtime is Supabase-only. Firebase migration code is intentionally
-// kept in dedicated migration scripts and is not imported by production paths.
-type DisabledFirestore = {
-  collection: (...args: unknown[]) => { where: (...args: unknown[]) => any; doc: (...args: unknown[]) => any; get: () => Promise<{ docs: any[] }> };
-  runTransaction: (callback: (transaction: any) => Promise<any>) => Promise<any>;
-};
-const firestore = null as unknown as DisabledFirestore;
 const useSupabase = true;
-// Legacy helpers below are retained only for type-compatible migration code;
-// production Tier 1 bookings use the tenant selected in Tier1State.
-const providerId = process.env.TIER1_PROVIDER_ID || "washpoint";
-const locationId = process.env.TIER1_LOCATION_ID || "washpoint-main";
-const fallback: Settings = { min_lead_minutes: 60, max_advance_days: 14, buffer_minutes: 15, weekday_open: "08:00", weekday_close: "19:00", weekend_open: "08:00", weekend_close: "21:00" };
 
 function localDate(date = new Date()) { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuala_Lumpur", year: "numeric", month: "2-digit", day: "2-digit" }).format(date); }
 function addDays(dateIso: string, days: number) { const d = new Date(`${dateIso}T12:00:00+08:00`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); }
@@ -53,53 +40,6 @@ function serviceLabel(service: Service) { return `${service.name} — ${service.
 function phone(value: string) { return value.match(/(?:\+?6?0)1[0-9][\s-]?\d{3,4}[\s-]?\d{3,4}\b/)?.[0].replace(/[\s-]/g, ""); }
 function isYes(value: string) { return /^(yes|y|confirm|confirmed|ya|betul|ok|okay)$/i.test(value.trim()); }
 function isNo(value: string) { return /^(no|n|cancel|batal|restart|mula baru)$/i.test(value.trim()); }
-function inCurrentLocation<T extends TenantScoped>(value: T) {
-  return value.provider_id === providerId && value.location_id === locationId;
-}
-function asMillis(value: unknown) {
-  return value && typeof value === "object" && "toDate" in value
-    ? (value as { toDate: () => Date }).toDate().getTime()
-    : new Date(String(value)).getTime();
-}
-function requestIdFor(threadId: string, state: Tier1State) {
-  if (state.bookingRequestId) return state.bookingRequestId;
-  return createHash("sha256")
-    .update([providerId, locationId, threadId, state.serviceId, state.dateIso, state.time24h].join("|"))
-    .digest("hex")
-    .slice(0, 32);
-}
-
-export async function loadBookingContext(): Promise<BookingContext> {
-  if (useSupabase) {
-    if (!supabaseConfigured()) throw new Error("Supabase booking mode is enabled but its server credentials are missing");
-    throw new Error("A provider and location must be selected before loading booking context");
-  }
-  if (firestore) {
-    const [servicesSnap, locationSettingsSnap, legacySettingsSnap] = await Promise.all([
-      firestore.collection("services").where("location_id", "==", locationId).get(),
-      firestore.collection("booking_settings").doc(locationId).get(),
-      locationId === "washpoint-main" ? firestore.collection("booking_settings").doc("main").get() : Promise.resolve(null),
-    ]);
-    const settingsSnap = locationSettingsSnap.exists ? locationSettingsSnap : legacySettingsSnap;
-    const s = settingsSnap?.data();
-    const contextValue = {
-      services: (servicesSnap.docs
-        .map((item: any) => ({ id: item.id, ...item.data() })) as Service[])
-        .filter(item => inCurrentLocation(item) && (item as Service & { is_active?: boolean }).is_active !== false),
-      settings: s ? {
-        min_lead_minutes: Number(s.min_lead_minutes) || 60,
-        max_advance_days: Number(s.max_advance_days) || 14,
-        buffer_minutes: Number(s.buffer_minutes) || 15,
-        weekday_open: s.weekday_open || "08:00", weekday_close: s.weekday_close || "19:00",
-        weekend_open: s.weekend_open || "08:00", weekend_close: s.weekend_close || "21:00",
-      } : fallback,
-    };
-    console.info("[tier1] firestore_context", { services: contextValue.services.length, weekday_close: contextValue.settings.weekday_close, min_lead_minutes: contextValue.settings.min_lead_minutes });
-    return contextValue;
-  }
-  return { services: [], settings: fallback };
-}
-
 type Provider = { id: string; name: string };
 type Location = { id: string; name: string; provider_id: string };
 
@@ -129,54 +69,6 @@ async function showServices(thread: Thread, state: Tier1State) {
   const c = await loadSupabaseBookingContext(tenant(state));
   const services = c.services.slice(0, 8);
   return thread.post(menu(`${state.providerName || "Provider"} — Book a wash`, `Choose a service at ${state.locationName || "the selected location"}:\n${services.map(serviceLabel).join("\n")}`, services.map((s, index) => ({ id: "t1_service", label: s.name.replace(/\s+(Wash|Detail)$/i, "").slice(0, 12), value: String(index) }))));
-}
-
-export async function availableSlots(contextValue: BookingContext, dateIso: string, service: Service, requestedTime?: string) {
-  if (useSupabase) throw new Error("Tenant is required for Supabase availability");
-  if (!firestore) return [];
-  const date = new Date(`${dateIso}T12:00:00+08:00`);
-  const latest = new Date(`${localDate()}T12:00:00+08:00`); latest.setUTCDate(latest.getUTCDate() + contextValue.settings.max_advance_days);
-  // Do not compare a date's artificial noon timestamp with the current time:
-  // that incorrectly removes the whole of today after noon. Individual slot
-  // timestamps below enforce the minimum lead time instead.
-  if (!isDateBookable(dateIso, localDate(), contextValue.settings.max_advance_days) || date > latest) return [];
-  const weekend = [0, 6].includes(date.getUTCDay());
-  const open = weekend ? contextValue.settings.weekend_open : contextValue.settings.weekday_open;
-  const close = weekend ? contextValue.settings.weekend_close : contextValue.settings.weekday_close;
-  let blackoutData: Array<TenantScoped & { date?: string }> = [];
-  let baysData: Array<TenantScoped & { id: string; is_active?: boolean; status?: string }> = [];
-  let appointmentsData: Array<TenantScoped & { bay_id: string; scheduled_at: unknown; duration_minutes: number; status?: string }> = [];
-  let breaksData: Array<TenantScoped & { bay_id: string; start_time: string; duration_minutes: number }> = [];
-  let closuresData: Array<TenantScoped & { bay_id: string; starts_at: unknown; ends_at: unknown }> = [];
-  const [blackout, bays, appointments, breaks, closures] = await Promise.all([
-    firestore.collection("blackout_dates").where("location_id", "==", locationId).get(),
-    firestore.collection("bays").where("location_id", "==", locationId).get(),
-    firestore.collection("appointments").where("location_id", "==", locationId).where("scheduled_date", "==", dateIso).get(),
-    firestore.collection("crew_break_schedule").where("location_id", "==", locationId).get(),
-    firestore.collection("bay_closures").where("location_id", "==", locationId).get(),
-  ]);
-  blackoutData = blackout.docs.map((x: any) => x.data() as typeof blackoutData[number]).filter((x: any) => x.date === dateIso && inCurrentLocation(x));
-  baysData = (bays.docs.map((x: any) => ({ id: x.id, ...x.data() })) as typeof baysData).filter(inCurrentLocation);
-  appointmentsData = appointments.docs.map((x: any) => x.data() as typeof appointmentsData[number]).filter((x: any) => x.status !== "cancelled" && inCurrentLocation(x));
-  breaksData = breaks.docs.map((x: any) => x.data() as typeof breaksData[number]).filter(inCurrentLocation);
-  closuresData = closures.docs.map((x: any) => x.data() as typeof closuresData[number]).filter(inCurrentLocation);
-  if (blackoutData.length || !baysData.length) return [];
-  const starts = requestedTime ? [requestedTime] : Array.from({ length: Math.floor((mins(close) - mins(open)) / 30) + 1 }, (_, i) => mins(open) + i * 30).map(total => `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`);
-  return starts.filter(time => {
-    if (mins(time) < mins(open) || mins(time) + service.duration_minutes > mins(close)) return false;
-    const start = new Date(`${dateIso}T${time}:00+08:00`).getTime(); const end = start + service.duration_minutes * 60000;
-    if (start < Date.now() + contextValue.settings.min_lead_minutes * 60000) return false;
-    return baysData.filter(bay => bay.is_active !== false && (!bay.status || bay.status === "open")).some(bay => {
-      const busy = appointmentsData.some(a => {
-        const existingStart = asMillis(a.scheduled_at);
-        const existingEnd = existingStart + Number(a.duration_minutes) * 60000;
-        return a.bay_id === bay.id && bookingIntervalsOverlap(start, end, existingStart, existingEnd, contextValue.settings.buffer_minutes);
-      });
-      const breakBusy = breaksData.some(b => b.bay_id === bay.id && intervalsOverlap(start, end, new Date(`${dateIso}T${String(b.start_time).slice(0, 5)}:00+08:00`).getTime(), new Date(`${dateIso}T${String(b.start_time).slice(0, 5)}:00+08:00`).getTime() + Number(b.duration_minutes) * 60000));
-      const closed = closuresData.some(c => c.bay_id === bay.id && intervalsOverlap(start, end, asMillis(c.starts_at), asMillis(c.ends_at)));
-      return !busy && !breakBusy && !closed;
-    });
-  });
 }
 
 function menu(title: string, body: string, buttons: Array<{ id: string; label: string; value?: string }>) {
@@ -241,152 +133,12 @@ export async function handleTier1Action(thread: Thread, actionId: string, value?
   return thread.post("Please use the buttons above, or send /start to begin again.");
 }
 
-type ReservationResult =
-  | { status: "created" | "existing"; reference: string; service: Service }
-  | { status: "unavailable" };
-
-export async function reserveFirestoreAppointment(threadId: string, state: Tier1State): Promise<ReservationResult> {
-  if (!firestore || !state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone || !state.vehiclePlate || !state.vehicleMakeModel) {
-    return { status: "unavailable" };
-  }
-  const db = firestore;
-  const serviceId = state.serviceId;
-  const dateIso = state.dateIso;
-  const time24h = state.time24h;
-  const customerName = state.customerName;
-  const customerPhone = state.customerPhone;
-  const requestId = requestIdFor(threadId, state);
-  const idempotencyHash = createHash("sha256").update(requestId).digest("hex");
-  const appointmentRef = db.collection("appointments").doc(`t1_${idempotencyHash.slice(0, 32)}`);
-  const reference = `WP-T1-${dateIso.replaceAll("-", "")}-${idempotencyHash.slice(0, 6).toUpperCase()}`;
-
-  return db.runTransaction(async transaction => {
-    const existing = await transaction.get(appointmentRef);
-    if (existing.exists) {
-      const value = existing.data();
-      if (value && inCurrentLocation(value)) {
-        const serviceSnapshot = await transaction.get(db.collection("services").doc(value.service_id));
-        if (serviceSnapshot.exists) {
-          return {
-            status: "existing" as const,
-            reference: String(value.reference || reference),
-            service: { id: serviceSnapshot.id, ...serviceSnapshot.data() } as Service,
-          };
-        }
-      }
-      return { status: "unavailable" as const };
-    }
-
-    const [serviceSnapshot, settingsSnapshot, baysSnapshot, bookingsSnapshot, blackoutSnapshot, breaksSnapshot, closuresSnapshot] = await Promise.all([
-      transaction.get(db.collection("services").doc(serviceId)),
-      transaction.get(db.collection("booking_settings").doc("main")),
-      transaction.get(db.collection("bays")),
-      transaction.get(db.collection("appointments").where("location_id", "==", locationId).where("scheduled_date", "==", dateIso)),
-      transaction.get(db.collection("blackout_dates")),
-      transaction.get(db.collection("crew_break_schedule")),
-      transaction.get(db.collection("bay_closures")),
-    ]);
-
-    // Every confirmation for the same bay and calendar day reads and updates the
-    // same lock document. If two customers confirm concurrently, Firestore
-    // retries the losing transaction, which then sees the winner's appointment.
-    const candidateBays = (baysSnapshot.docs.map((item: any) => ({ id: item.id, ...item.data() })) as Array<TenantScoped & { id: string; is_active?: boolean; status?: string }>)
-      .filter(inCurrentLocation)
-      .filter(item => item.is_active !== false && (!item.status || item.status === "open"));
-    const lockRefs = candidateBays.map(item => db.collection("booking_day_locks").doc(`${providerId}_${locationId}_${dateIso}_${item.id}`));
-    const lockSnapshots = await Promise.all(lockRefs.map(ref => transaction.get(ref)));
-
-    if (!serviceSnapshot.exists || !settingsSnapshot.exists) return { status: "unavailable" as const };
-    const service = { id: serviceSnapshot.id, ...serviceSnapshot.data() } as Service & { is_active?: boolean };
-    const settingsData = settingsSnapshot.data() as TenantScoped & Partial<Settings>;
-    if (!inCurrentLocation(service) || service.is_active === false || !inCurrentLocation(settingsData)) {
-      return { status: "unavailable" as const };
-    }
-    const settings: Settings = {
-      min_lead_minutes: Number(settingsData.min_lead_minutes) || fallback.min_lead_minutes,
-      max_advance_days: Number(settingsData.max_advance_days) || fallback.max_advance_days,
-      buffer_minutes: Number(settingsData.buffer_minutes) || fallback.buffer_minutes,
-      weekday_open: settingsData.weekday_open || fallback.weekday_open,
-      weekday_close: settingsData.weekday_close || fallback.weekday_close,
-      weekend_open: settingsData.weekend_open || fallback.weekend_open,
-      weekend_close: settingsData.weekend_close || fallback.weekend_close,
-    };
-
-    const today = localDate();
-    if (!isDateBookable(dateIso, today, settings.max_advance_days)) return { status: "unavailable" as const };
-    const date = new Date(`${dateIso}T12:00:00+08:00`);
-    const weekend = [0, 6].includes(date.getUTCDay());
-    const open = weekend ? settings.weekend_open : settings.weekday_open;
-    const close = weekend ? settings.weekend_close : settings.weekday_close;
-    const start = new Date(`${dateIso}T${time24h}:00+08:00`).getTime();
-    const end = start + Number(service.duration_minutes) * 60000;
-    if (mins(time24h) < mins(open) || mins(time24h) + Number(service.duration_minutes) > mins(close)) return { status: "unavailable" as const };
-    if (start < Date.now() + settings.min_lead_minutes * 60000) return { status: "unavailable" as const };
-    if (blackoutSnapshot.docs.some((item: any) => {
-      const value = item.data();
-      return inCurrentLocation(value) && value.date === dateIso;
-    })) return { status: "unavailable" as const };
-
-    const bookings = bookingsSnapshot.docs.map((item: any) => item.data()).filter((value: any) => inCurrentLocation(value) && value.status !== "cancelled");
-    const breaks = breaksSnapshot.docs.map((item: any) => item.data()).filter(inCurrentLocation);
-    const closures = closuresSnapshot.docs.map((item: any) => item.data()).filter(inCurrentLocation);
-    const bay = candidateBays.find(item => {
-        const bookingConflict = bookings.some((value: any) => {
-          if (value.bay_id !== item.id) return false;
-          const existingStart = asMillis(value.scheduled_at);
-          const existingEnd = existingStart + Number(value.duration_minutes) * 60000;
-          return bookingIntervalsOverlap(start, end, existingStart, existingEnd, settings.buffer_minutes);
-        });
-        const breakConflict = breaks.some((value: any) => {
-          if (value.bay_id !== item.id) return false;
-          const breakStart = new Date(`${dateIso}T${String(value.start_time).slice(0, 5)}:00+08:00`).getTime();
-          return intervalsOverlap(start, end, breakStart, breakStart + Number(value.duration_minutes) * 60000);
-        });
-        const closureConflict = closures.some((value: any) => value.bay_id === item.id && intervalsOverlap(start, end, asMillis(value.starts_at), asMillis(value.ends_at)));
-        return !bookingConflict && !breakConflict && !closureConflict;
-      });
-    if (!bay) return { status: "unavailable" as const };
-
-    const selectedLockIndex = candidateBays.findIndex(item => item.id === bay.id);
-    const selectedLock = lockSnapshots[selectedLockIndex];
-    transaction.set(lockRefs[selectedLockIndex], {
-      provider_id: providerId,
-      location_id: locationId,
-      date: dateIso,
-      bay_id: bay.id,
-      revision: Number(selectedLock.data()?.revision || 0) + 1,
-      updated_at: new Date().toISOString(),
-    });
-    transaction.create(appointmentRef, {
-      provider_id: providerId,
-      location_id: locationId,
-      booking_request_id: requestId,
-      customer_chat_id: threadId,
-      customer_name: customerName,
-      customer_phone: customerPhone,
-      vehicle_plate: state.vehiclePlate,
-      vehicle_make_model: state.vehicleMakeModel,
-      channel: "telegram",
-      bay_id: bay.id,
-      service_id: service.id,
-      scheduled_at: new Date(start).toISOString(),
-      scheduled_date: dateIso,
-      duration_minutes: Number(service.duration_minutes),
-      price_myr: Number(service.price_myr),
-      status: "confirmed",
-      reference,
-      created_at: new Date().toISOString(),
-    });
-    return { status: "created" as const, reference, service };
-  });
-}
-
 async function confirmTier1(thread: Thread, c: BookingContext, state: Tier1State) {
-  if ((!firestore && !useSupabase) || !state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone || !state.vehiclePlate || !state.vehicleMakeModel) return thread.post("I still need your name, phone number, car plate and car make/model before confirming.");
+  if ((!useSupabase) || !state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone || !state.vehiclePlate || !state.vehicleMakeModel) return thread.post("I still need your name, phone number, car plate and car make/model before confirming.");
   await thread.setState({ ...state, step: "submitting", lastActiveAt: new Date().toISOString() });
   const reservation = useSupabase
     ? await reserveSupabaseAppointment(thread.id, state, tenant(state))
-    : await reserveFirestoreAppointment(thread.id, state);
+    : { status: "unavailable" as const };
   console.info("[tier1] transactional_confirmation", { providerId: state.providerId, locationId: state.locationId, date: state.dateIso, time: state.time24h, service: state.serviceId, status: reservation.status });
   if (reservation.status === "unavailable") {
     await thread.setState({ ...state, step: "confirm", lastActiveAt: new Date().toISOString() });

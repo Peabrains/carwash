@@ -4,8 +4,8 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import type { GatewayProviderOptions } from "@ai-sdk/gateway";
 import { bookingModel } from "./model.js";
-import { availableSlots, loadBookingContext, type BookingContext, type Service, type Settings } from "./tier1-flow.js";
-import { reserveSupabaseAppointment } from "./supabase-booking.js";
+import { availableSupabaseSlots, loadSupabaseBookingContext, reserveSupabaseAppointment } from "./supabase-booking.js";
+import type { BookingContext, Service, Settings, Tier1State } from "./tier1-flow.js";
 
 type Turn = { role: "user" | "assistant"; content: string };
 export type SafeBookingState = {
@@ -24,7 +24,8 @@ function validDate(v?: string | null) { return v && /^\d{4}-\d{2}-\d{2}$/.test(v
 function validTime(v?: string | null) { return v && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : undefined; }
 function mins(v: string) { const p = v.slice(0,5).split(":").map(Number); return p[0] * 60 + p[1]; }
 
-async function loadContext(): Promise<BookingContext> { return loadBookingContext(); }
+function configuredTenant() { return { providerId: process.env.TIER1_PROVIDER_ID || "washpoint", locationId: process.env.TIER1_LOCATION_ID || "washpoint-main" }; }
+async function loadContext(): Promise<BookingContext> { return loadSupabaseBookingContext(configuredTenant()); }
 async function checkAvailability(dateIso: string, time: string, service: Service, settings: Settings): Promise<Availability> {
   const latest = new Date(todayMalaysia() + "T12:00:00+08:00");
   latest.setUTCDate(latest.getUTCDate() + settings.max_advance_days);
@@ -35,15 +36,15 @@ async function checkAvailability(dateIso: string, time: string, service: Service
   const close = day === 0 || day === 6 ? settings.weekend_close : settings.weekday_close;
   if (mins(time) < mins(open) || mins(time) + service.duration_minutes > mins(close)) return { available:false, reason:"outside_hours" };
   if (requested.getTime() < Date.now() + settings.min_lead_minutes * 60000) return { available:false, reason:"too_soon" };
-  const slots = await availableSlots({ services: [service], settings }, dateIso, service, time);
+  const slots = await availableSupabaseSlots({ services: [service], settings }, configuredTenant(), dateIso, service, time);
   return slots.includes(time) ? { available: true, reason: "available" } : { available: false, reason: "fully_booked" };
 }
 
 async function submitBooking(state: SafeBookingState, context: BookingContext, chatId: string): Promise<string> {
   if(!state.serviceName||!state.dateIso||!state.time24h||!state.customerName||!state.customerPhone||!state.vehiclePlate||!state.vehicleMakeModel)return "I still need the complete booking details, including car plate and make/model, before submitting.";
   const service=serviceFor(state.serviceName,context.services); if(!service)return "I couldn't match that service to the live catalogue.";
-  const bookingState = { step: "confirm" as const, bookingRequestId: state.bookingRequestId, serviceId: service.id, serviceName: service.name, durationMinutes: service.duration_minutes, priceMyr: service.price_myr, dateIso: state.dateIso, time24h: state.time24h, customerName: state.customerName, customerPhone: state.customerPhone, vehiclePlate: state.vehiclePlate, vehicleMakeModel: state.vehicleMakeModel };
-  const result = await reserveSupabaseAppointment(chatId, bookingState, { providerId: process.env.TIER1_PROVIDER_ID || "washpoint", locationId: process.env.TIER1_LOCATION_ID || "washpoint-main" });
+  const bookingState: Tier1State = { step: "confirm", bookingRequestId: state.bookingRequestId, serviceId: service.id, serviceName: service.name, durationMinutes: service.duration_minutes, priceMyr: service.price_myr, dateIso: state.dateIso, time24h: state.time24h, customerName: state.customerName, customerPhone: state.customerPhone, vehiclePlate: state.vehiclePlate, vehicleMakeModel: state.vehicleMakeModel };
+  const result = await reserveSupabaseAppointment(chatId, bookingState, configuredTenant());
   if(result.status === "unavailable") return "That slot is no longer available. Please choose another time.";
   return (result.status === "existing" ? "Already confirmed — " : "Confirmed — ")+service.name+" on "+state.dateIso+" at "+state.time24h+". Your reference is "+result.reference+".";
 }

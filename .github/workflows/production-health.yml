@@ -1,0 +1,15 @@
+name: Production health check
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check production bot and Supabase health
+        run: |
+          set -euo pipefail
+          curl --fail --show-error --silent https://carwash-bot.vercel.app/api/health
