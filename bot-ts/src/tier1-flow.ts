@@ -1,6 +1,7 @@
 import "./env.js";
 import { randomUUID } from "node:crypto";
 import type { Channel, Thread } from "chat";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Actions, Button, Card, CardText } from "chat";
 import { availableSupabaseSlots, loadSupabaseBookingContext, publicSupabaseClient, reserveSupabaseAppointment } from "./supabase-booking.js";
 
@@ -43,8 +44,8 @@ function isNo(value: string) { return /^(no|n|cancel|batal|restart|mula baru)$/i
 type Provider = { id: string; name: string };
 type Location = { id: string; name: string; provider_id: string };
 
-async function activeProviders(): Promise<Provider[]> {
-  const { data, error } = await publicSupabaseClient().from("providers").select("id,name").eq("is_active", true).order("name");
+export async function activeProviders(db: SupabaseClient = publicSupabaseClient()): Promise<Provider[]> {
+  const { data, error } = await db.from("providers").select("id,name").eq("status", "active").order("name");
   if (error) throw new Error(`Supabase loading providers failed: ${error.message}`);
   return (data || []).map(row => ({ id: String(row.id), name: String(row.name) }));
 }
