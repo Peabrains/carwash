@@ -26,7 +26,7 @@ drop policy if exists staff_invitations_read_scoped on public.staff_invitations;
 create policy staff_invitations_read_scoped on public.staff_invitations
   for select to authenticated
   using (exists (
-    select 1 from public.current_staff_context() me
+    select 1 from private.current_staff_context() me
     where me.is_active
       and (me.role = 'platform_owner' or me.provider_id = staff_invitations.provider_id)
   ));
@@ -42,7 +42,7 @@ create or replace function public.invite_staff_member(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = ''
 as $$
 declare
   actor public.staff;
@@ -102,7 +102,7 @@ create or replace function public.accept_staff_invitation()
 returns public.staff
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = ''
 as $$
 declare
   current_user_id uuid := auth.uid();
@@ -138,7 +138,7 @@ create or replace function public.revoke_staff_access(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, auth
+set search_path = ''
 as $$
 declare
   actor public.staff;
@@ -191,9 +191,9 @@ begin
 end;
 $$;
 
-revoke all on function public.invite_staff_member(text, text, text, text, text, boolean) from public, anon;
+revoke all on function public.invite_staff_member(text, text, text, text, text, boolean) from public, anon, authenticated;
 grant execute on function public.invite_staff_member(text, text, text, text, text, boolean) to authenticated;
-revoke all on function public.accept_staff_invitation() from public, anon;
+revoke all on function public.accept_staff_invitation() from public, anon, authenticated;
 grant execute on function public.accept_staff_invitation() to authenticated;
-revoke all on function public.revoke_staff_access(uuid, uuid) from public, anon;
+revoke all on function public.revoke_staff_access(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.revoke_staff_access(uuid, uuid) to authenticated;

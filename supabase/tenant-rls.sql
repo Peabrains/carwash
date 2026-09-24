@@ -1,4 +1,7 @@
 -- Provider-scoped RLS for Docket's multi-tenant Supabase database.
+-- The booking_security_notifications migration replaces broad FOR ALL
+-- management policies below with operation-specific write policies. Keep this
+-- bootstrap file for fresh databases; apply migrations after the base schema.
 
 alter table providers enable row level security;
 alter table locations enable row level security;
