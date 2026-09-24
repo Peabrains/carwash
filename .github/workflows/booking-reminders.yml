@@ -1,0 +1,21 @@
+name: Send booking reminders
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send due reminders
+        env:
+          CRON_SECRET: ${{ secrets.BOOKING_NOTIFICATION_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "${CRON_SECRET}"
+          curl --fail --show-error --silent \
+            -X POST \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            https://carwash-bot.vercel.app/api/internal/send-booking-notifications

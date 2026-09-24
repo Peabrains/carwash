@@ -54,7 +54,7 @@ npm --prefix bot-ts test
 npm --prefix bot-ts run typecheck
 ```
 
-The Vercel bot requires Supabase server credentials, Telegram credentials, and `TIER1_PROVIDER_ID` / `TIER1_LOCATION_ID`.
+The Vercel bot requires Supabase server credentials, Telegram credentials, `TIER1_PROVIDER_ID` / `TIER1_LOCATION_ID`, and a random `BOOKING_NOTIFICATION_CRON_SECRET`. The same cron secret must be stored in both Vercel Production and the GitHub Actions repository secrets. GitHub calls the protected reminder endpoint every 10 minutes; failed runs are visible under Actions.
 
 ## Switching Supabase accounts/projects
 
@@ -83,6 +83,16 @@ node scripts/supabase-profile.mjs run account-b -- supabase projects list
 ## Booking guarantees
 
 Confirmation runs through Supabase's atomic booking RPC. It re-checks the live service, settings, bays, appointments, blackout dates, breaks, and closures. A deterministic request ID prevents duplicate confirmation, while the database transaction prevents two concurrent customers from taking an overlapping slot.
+
+Customer cancellation and rescheduling also use atomic Supabase functions. A customer must match the booking phone number, and each provider/location can control the minimum online-change notice period with `booking_settings.customer_change_notice_minutes`.
+
+Telegram confirmations, reschedule/cancellation messages, and 24-hour/2-hour reminders are stored in `booking_notifications` before delivery. The sender claims rows atomically, retries temporary failures, and stops after four attempts. `/api/health` reports missing reminder configuration and an excessive failed-message count without exposing customer data.
+
+## Production checklist and known blockers
+
+- `BOOKING_NOTIFICATION_CRON_SECRET` is configured in Vercel Production. Add the same value as the GitHub Actions repository secret before enabling the reminder schedule; this remains pending until GitHub CLI authentication is restored.
+- Supabase leaked-password protection must be enabled in the Account B Auth password settings when the project plan exposes that control. Until then, the related advisor warning is acknowledged as a plan limitation.
+- Production catalogue checks and live booking lifecycle tests are intentionally deferred. Use only a dedicated test appointment when those checks are approved; never modify a real customer booking.
 
 ## Legacy archive
 
