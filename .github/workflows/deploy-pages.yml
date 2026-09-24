@@ -24,6 +24,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm --prefix bot-ts ci
+      - run: npm --prefix bot-ts run typecheck
+      - run: npm --prefix bot-ts test
+      - run: git diff --check
       - run: npm run build
         env:
           VITE_DATA_BACKEND: supabase

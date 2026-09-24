@@ -1,7 +1,5 @@
 import "./env.js";
 import { createHash, randomUUID } from "node:crypto";
-import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
 import type { Channel, Thread } from "chat";
 import { Actions, Button, Card, CardText } from "chat";
 import { bookingIntervalsOverlap, intervalsOverlap, isDateBookable } from "./booking-rules.js";
@@ -28,13 +26,13 @@ export type Service = TenantScoped & { id: string; name: string; duration_minute
 export type Settings = { min_lead_minutes: number; max_advance_days: number; buffer_minutes: number; weekday_open: string; weekday_close: string; weekend_open: string; weekend_close: string };
 export type BookingContext = { services: Service[]; settings: Settings };
 
-function firebaseDb() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!raw) return null;
-  if (!getApps().length) initializeApp({ credential: cert(JSON.parse(raw)) });
-  return getFirestore();
-}
-const firestore = firebaseDb();
+// Booking runtime is Supabase-only. Firebase migration code is intentionally
+// kept in dedicated migration scripts and is not imported by production paths.
+type DisabledFirestore = {
+  collection: (...args: unknown[]) => { where: (...args: unknown[]) => any; doc: (...args: unknown[]) => any; get: () => Promise<{ docs: any[] }> };
+  runTransaction: (callback: (transaction: any) => Promise<any>) => Promise<any>;
+};
+const firestore = null as unknown as DisabledFirestore;
 const providerId = process.env.TIER1_PROVIDER_ID || "washpoint";
 const locationId = process.env.TIER1_LOCATION_ID || "washpoint-main";
 const useSupabase = true;
@@ -80,7 +78,7 @@ export async function loadBookingContext(): Promise<BookingContext> {
     const s = settingsSnap?.data();
     const contextValue = {
       services: (servicesSnap.docs
-        .map(item => ({ id: item.id, ...item.data() })) as Service[])
+        .map((item: any) => ({ id: item.id, ...item.data() })) as Service[])
         .filter(item => inCurrentLocation(item) && (item as Service & { is_active?: boolean }).is_active !== false),
       settings: s ? {
         min_lead_minutes: Number(s.min_lead_minutes) || 60,
@@ -120,11 +118,11 @@ export async function availableSlots(contextValue: BookingContext, dateIso: stri
     firestore.collection("crew_break_schedule").where("location_id", "==", locationId).get(),
     firestore.collection("bay_closures").where("location_id", "==", locationId).get(),
   ]);
-  blackoutData = blackout.docs.map(x => x.data() as typeof blackoutData[number]).filter(x => x.date === dateIso && inCurrentLocation(x));
-  baysData = (bays.docs.map(x => ({ id: x.id, ...x.data() })) as typeof baysData).filter(inCurrentLocation);
-  appointmentsData = appointments.docs.map(x => x.data() as typeof appointmentsData[number]).filter(x => x.status !== "cancelled" && inCurrentLocation(x));
-  breaksData = breaks.docs.map(x => x.data() as typeof breaksData[number]).filter(inCurrentLocation);
-  closuresData = closures.docs.map(x => x.data() as typeof closuresData[number]).filter(inCurrentLocation);
+  blackoutData = blackout.docs.map((x: any) => x.data() as typeof blackoutData[number]).filter((x: any) => x.date === dateIso && inCurrentLocation(x));
+  baysData = (bays.docs.map((x: any) => ({ id: x.id, ...x.data() })) as typeof baysData).filter(inCurrentLocation);
+  appointmentsData = appointments.docs.map((x: any) => x.data() as typeof appointmentsData[number]).filter((x: any) => x.status !== "cancelled" && inCurrentLocation(x));
+  breaksData = breaks.docs.map((x: any) => x.data() as typeof breaksData[number]).filter(inCurrentLocation);
+  closuresData = closures.docs.map((x: any) => x.data() as typeof closuresData[number]).filter(inCurrentLocation);
   if (blackoutData.length || !baysData.length) return [];
   const starts = requestedTime ? [requestedTime] : Array.from({ length: Math.floor((mins(close) - mins(open)) / 30) + 1 }, (_, i) => mins(open) + i * 30).map(total => `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`);
   return starts.filter(time => {
@@ -241,7 +239,7 @@ export async function reserveFirestoreAppointment(threadId: string, state: Tier1
     // Every confirmation for the same bay and calendar day reads and updates the
     // same lock document. If two customers confirm concurrently, Firestore
     // retries the losing transaction, which then sees the winner's appointment.
-    const candidateBays = (baysSnapshot.docs.map(item => ({ id: item.id, ...item.data() })) as Array<TenantScoped & { id: string; is_active?: boolean; status?: string }>)
+    const candidateBays = (baysSnapshot.docs.map((item: any) => ({ id: item.id, ...item.data() })) as Array<TenantScoped & { id: string; is_active?: boolean; status?: string }>)
       .filter(inCurrentLocation)
       .filter(item => item.is_active !== false && (!item.status || item.status === "open"));
     const lockRefs = candidateBays.map(item => db.collection("booking_day_locks").doc(`${providerId}_${locationId}_${dateIso}_${item.id}`));
@@ -273,27 +271,27 @@ export async function reserveFirestoreAppointment(threadId: string, state: Tier1
     const end = start + Number(service.duration_minutes) * 60000;
     if (mins(time24h) < mins(open) || mins(time24h) + Number(service.duration_minutes) > mins(close)) return { status: "unavailable" as const };
     if (start < Date.now() + settings.min_lead_minutes * 60000) return { status: "unavailable" as const };
-    if (blackoutSnapshot.docs.some(item => {
+    if (blackoutSnapshot.docs.some((item: any) => {
       const value = item.data();
       return inCurrentLocation(value) && value.date === dateIso;
     })) return { status: "unavailable" as const };
 
-    const bookings = bookingsSnapshot.docs.map(item => item.data()).filter(value => inCurrentLocation(value) && value.status !== "cancelled");
-    const breaks = breaksSnapshot.docs.map(item => item.data()).filter(inCurrentLocation);
-    const closures = closuresSnapshot.docs.map(item => item.data()).filter(inCurrentLocation);
+    const bookings = bookingsSnapshot.docs.map((item: any) => item.data()).filter((value: any) => inCurrentLocation(value) && value.status !== "cancelled");
+    const breaks = breaksSnapshot.docs.map((item: any) => item.data()).filter(inCurrentLocation);
+    const closures = closuresSnapshot.docs.map((item: any) => item.data()).filter(inCurrentLocation);
     const bay = candidateBays.find(item => {
-        const bookingConflict = bookings.some(value => {
+        const bookingConflict = bookings.some((value: any) => {
           if (value.bay_id !== item.id) return false;
           const existingStart = asMillis(value.scheduled_at);
           const existingEnd = existingStart + Number(value.duration_minutes) * 60000;
           return bookingIntervalsOverlap(start, end, existingStart, existingEnd, settings.buffer_minutes);
         });
-        const breakConflict = breaks.some(value => {
+        const breakConflict = breaks.some((value: any) => {
           if (value.bay_id !== item.id) return false;
           const breakStart = new Date(`${dateIso}T${String(value.start_time).slice(0, 5)}:00+08:00`).getTime();
           return intervalsOverlap(start, end, breakStart, breakStart + Number(value.duration_minutes) * 60000);
         });
-        const closureConflict = closures.some(value => value.bay_id === item.id && intervalsOverlap(start, end, asMillis(value.starts_at), asMillis(value.ends_at)));
+        const closureConflict = closures.some((value: any) => value.bay_id === item.id && intervalsOverlap(start, end, asMillis(value.starts_at), asMillis(value.ends_at)));
         return !bookingConflict && !breakConflict && !closureConflict;
       });
     if (!bay) return { status: "unavailable" as const };
