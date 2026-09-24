@@ -11,11 +11,11 @@ export async function POST(request: Request) {
     const name = body.name?.trim() || "";
     const vehiclePlate = body.vehicle_plate?.trim() || "";
     const action = body.action || "lookup";
-    if ((!reference && (!phone || !name || !vehiclePlate)) || !["lookup", "cancel", "reschedule"].includes(action)) return json({ error: "Enter a booking reference, or provide the customer name, phone number and car plate." }, 400);
+    if (!phone || (!reference && (!name || !vehiclePlate)) || !["lookup", "cancel", "reschedule"].includes(action)) return json({ error: "Enter your phone number with a booking reference, or provide your name, phone number and car plate." }, 400);
     const result = await managePublicBooking({ reference, phone, name, vehiclePlate, action, dateIso: body.date, time: body.time });
     return json({ booking: result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to manage booking";
-    return json({ error: message }, message.includes("could not find") || message.includes("already") ? 404 : 400);
+    return json({ error: message }, message.includes("could not find") ? 404 : 400);
   }
 }

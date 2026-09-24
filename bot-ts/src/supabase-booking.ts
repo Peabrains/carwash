@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { bookingIntervalsOverlap, intervalsOverlap, isDateBookable } from "./booking-rules.js";
+import { customerIdentityMatches } from "./public-booking-rules.js";
 import type { BookingContext, Service, Settings, Tier1State } from "./tier1-flow.js";
 
 type Row = Record<string, unknown>;
@@ -135,22 +136,20 @@ export async function reserveSupabaseAppointment(threadId: string, state: Tier1S
   return { status: row.result_status === "existing" ? "existing" : "created", reference: String(row.appointment_reference || reference), service };
 }
 
-function normalizePhone(value: string) { return value.replace(/[\s-]/g, "").replace(/^\+/, ""); }
-function normalizeText(value: string) { return value.trim().toLocaleLowerCase(); }
-function normalizePlate(value: string) { return value.replace(/[\s-]/g, "").toLocaleUpperCase(); }
-
 async function publicBookingRow({ reference, phone, name, vehiclePlate }: { reference: string; phone: string; name: string; vehiclePlate: string }) {
   const db = client();
   if (reference.trim()) {
     const { data: appointment, error } = await db.from("appointments").select("*").eq("reference", reference.trim()).maybeSingle();
     fail(error, "finding booking");
-    if (!appointment) throw new Error("We could not find that booking reference.");
+    if (!appointment || !customerIdentityMatches(appointment, { reference, phone, name, vehiclePlate })) {
+      throw new Error("We could not find a booking with those details.");
+    }
     return appointment;
   }
   const { data: candidates, error } = await db.from("appointments").select("*").eq("vehicle_plate", vehiclePlate.trim()).limit(25);
   fail(error, "finding booking");
-  const appointment = (candidates || []).find(item => normalizePhone(String(item.customer_phone || "")) === normalizePhone(phone) && normalizeText(String(item.customer_name || "")) === normalizeText(name) && normalizePlate(String(item.vehicle_plate || "")) === normalizePlate(vehiclePlate));
-  if (!appointment) throw new Error("We could not find a booking with those customer and vehicle details.");
+  const appointment = (candidates || []).find(item => customerIdentityMatches(item, { reference, phone, name, vehiclePlate }));
+  if (!appointment) throw new Error("We could not find a booking with those details.");
   return appointment;
 }
 
@@ -187,25 +186,18 @@ export async function managePublicBooking({ reference, phone, name = "", vehicle
   const db = client();
   const appointment = await publicBookingRow({ reference, phone, name, vehiclePlate });
   if (action === "lookup") return publicBookingDetails(appointment);
-  if (appointment.status === "cancelled") throw new Error("This booking has already been cancelled.");
-  const start = asMillis(appointment.scheduled_at);
-  if (start <= Date.now() + 60 * 60000) throw new Error("This booking is too close to its appointment time to change online. Please contact the car wash.");
   if (action === "cancel") {
-    const { data: updated, error } = await db.from("appointments").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", appointment.id).select().single();
-    fail(error, "cancelling booking");
-    const { error: eventError } = await db.from("booking_events").insert({ provider_id: appointment.provider_id, location_id: appointment.location_id, appointment_id: appointment.id, reference: appointment.reference, event_type: "status_changed", description: "Customer cancelled the booking online", old_value: { status: appointment.status }, new_value: { status: "cancelled" } });
-    fail(eventError, "recording booking cancellation");
+    const { error } = await db.rpc("cancel_public_appointment_atomic", { p_appointment_id: appointment.id });
+    fail(error, "cancelling booking atomically");
+    const { data: updated, error: reloadError } = await db.from("appointments").select("*").eq("id", appointment.id).single();
+    fail(reloadError, "loading cancelled booking");
     return publicBookingDetails(updated);
   }
   if (!dateIso || !time || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso) || !/^\d{2}:\d{2}$/.test(time)) throw new Error("Choose a valid new date and time.");
-  const { data: moved, error } = await db.rpc("reschedule_appointment_atomic", { p_appointment_id: appointment.id, p_scheduled_date: dateIso, p_time: time, p_bay_id: null });
-  fail(error, "rescheduling booking");
-  const moveResult = Array.isArray(moved) ? moved[0] : moved;
-  if (!moveResult) throw new Error("That time is no longer available.");
-  const scheduledAt = moveResult.result_scheduled_at;
+  const { data: moved, error } = await db.rpc("reschedule_public_appointment_atomic", { p_appointment_id: appointment.id, p_scheduled_date: dateIso, p_time: time });
+  fail(error, "rescheduling booking atomically");
+  if (!moved || (Array.isArray(moved) && moved.length === 0)) throw new Error("That time is no longer available.");
   const { data: updated, error: reloadError } = await db.from("appointments").select("*").eq("id", appointment.id).single();
   fail(reloadError, "loading rescheduled booking");
-  const { error: eventError } = await db.from("booking_events").insert({ provider_id: appointment.provider_id, location_id: appointment.location_id, appointment_id: appointment.id, reference: appointment.reference, event_type: "rescheduled", description: "Customer rescheduled the booking online", old_value: { scheduled_date: appointment.scheduled_date, scheduled_at: appointment.scheduled_at }, new_value: { scheduled_date: dateIso, scheduled_at: scheduledAt } });
-  fail(eventError, "recording booking reschedule");
   return publicBookingDetails(updated);
 }
