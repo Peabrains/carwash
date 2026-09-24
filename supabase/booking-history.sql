@@ -30,3 +30,7 @@ create policy booking_events_read_scoped on booking_events for select to authent
 
 create policy booking_events_insert_scoped on booking_events for insert to authenticated
   with check (exists (select 1 from staff me where me.id = (select auth.uid()) and me.is_active and me.role in ('platform_owner', 'owner', 'manager') and me.provider_id = booking_events.provider_id));
+
+-- Customer change cutoffs and durable Telegram delivery state are introduced
+-- by the booking_security_notifications migrations. Cancellation/rescheduling,
+-- event history, and notification queue writes commit as one transaction.

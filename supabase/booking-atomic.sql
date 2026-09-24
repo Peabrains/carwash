@@ -339,3 +339,7 @@ $$;
 
 revoke execute on function public.reschedule_appointment_atomic(uuid, date, text, uuid) from public, anon;
 grant execute on function public.reschedule_appointment_atomic(uuid, date, text, uuid) to authenticated, service_role;
+
+-- Customer self-service uses service-role-only wrappers created by the
+-- booking_security_notifications migrations. Staff continue using the RPC
+-- above; customer changes also write history and notification rows atomically.

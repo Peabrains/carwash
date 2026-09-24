@@ -37,6 +37,37 @@ begin
   if (select count(*) from pg_policies where schemaname = 'public' and tablename = 'staff' and cmd = 'SELECT') <> 1 then
     raise exception 'Staff must have exactly one SELECT policy';
   end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'booking_settings'
+      and column_name = 'customer_change_notice_minutes'
+  ) then
+    raise exception 'Customer change notice setting is missing';
+  end if;
+
+  if not exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'booking_notifications'
+  ) then
+    raise exception 'Booking notifications table is missing';
+  end if;
+
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'appointment_notification_queue' and not tgisinternal
+  ) then
+    raise exception 'Appointment notification trigger is missing';
+  end if;
+
+  if exists (
+    select 1 from information_schema.routine_privileges
+    where routine_schema = 'public'
+      and routine_name in ('cancel_public_appointment_atomic', 'reschedule_public_appointment_atomic')
+      and grantee in ('PUBLIC', 'anon', 'authenticated')
+  ) then
+    raise exception 'Customer change functions are exposed to browser roles';
+  end if;
 end
 $$;
 
