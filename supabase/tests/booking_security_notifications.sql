@@ -68,6 +68,22 @@ begin
   ) then
     raise exception 'Customer change functions are exposed to browser roles';
   end if;
+
+  if not exists (
+    select 1 from information_schema.routines
+    where routine_schema = 'public' and routine_name = 'claim_due_booking_notifications'
+  ) then
+    raise exception 'Notification claim function is missing';
+  end if;
+
+  if exists (
+    select 1 from information_schema.routine_privileges
+    where routine_schema = 'public'
+      and routine_name = 'claim_due_booking_notifications'
+      and grantee in ('PUBLIC', 'anon', 'authenticated')
+  ) then
+    raise exception 'Notification claim function is exposed to browser roles';
+  end if;
 end
 $$;
 

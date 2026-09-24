@@ -18,6 +18,21 @@ export async function GET() {
     healthy = false;
   }
 
+  const cronConfigured = Boolean(process.env.BOOKING_NOTIFICATION_CRON_SECRET?.trim());
+  checks.bookingNotificationCron = { ok: cronConfigured, configured: cronConfigured };
+  healthy &&= cronConfigured;
+
+  try {
+    const { count, error } = await publicSupabaseClient().from("booking_notifications").select("id", { count: "exact", head: true }).eq("status", "failed");
+    const failedCount = count || 0;
+    const ok = !error && failedCount <= 5;
+    checks.bookingNotifications = error ? { ok: false, error: error.message } : { ok, failedCount, threshold: 5 };
+    healthy &&= ok;
+  } catch (error) {
+    checks.bookingNotifications = { ok: false, error: error instanceof Error ? error.message : "Notification queue check failed" };
+    healthy = false;
+  }
+
   const token = process.env.TIER1_TELEGRAM_BOT_TOKEN;
   if (!token) {
     checks.telegram = { ok: false, error: "TIER1_TELEGRAM_BOT_TOKEN is not configured" };
