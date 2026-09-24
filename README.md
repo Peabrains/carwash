@@ -82,7 +82,7 @@ node scripts/supabase-profile.mjs run account-b -- supabase projects list
 
 ## Booking guarantees
 
-Confirmation runs in a Firestore transaction. It re-reads the live service, settings, bays, appointments, blackout dates, breaks, and outages. A deterministic request ID prevents duplicate confirmation, while a per-bay/day lock prevents two concurrent customers from taking an overlapping slot.
+Confirmation runs through Supabase's atomic booking RPC. It re-checks the live service, settings, bays, appointments, blackout dates, breaks, and closures. A deterministic request ID prevents duplicate confirmation, while the database transaction prevents two concurrent customers from taking an overlapping slot.
 
 ## Legacy archive
 

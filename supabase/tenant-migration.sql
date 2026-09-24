@@ -77,4 +77,4 @@ values (1, 'washpoint', 'washpoint-main')
 on conflict (id) do update set provider_id = excluded.provider_id, location_id = excluded.location_id;
 
 -- Backfill is intentionally separate from this structural migration. Existing
--- Firebase documents must be exported and validated before any rows are copied.
+-- Existing tenant data must be validated before any rows are copied.

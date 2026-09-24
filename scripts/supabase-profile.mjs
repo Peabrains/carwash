@@ -85,7 +85,7 @@ try {
   if (command === "use") {
     writeFileSync(activeFile, readFileSync(file));
     console.log(`Active Supabase profile set to ${env.SUPABASE_ACCOUNT_LABEL || name}.`);
-    console.log("The active file is local-only and does not replace the Firebase .env.");
+    console.log("The active file is local-only and is not committed to the repository.");
     process.exit(0);
   }
 

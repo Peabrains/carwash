@@ -4,9 +4,6 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/dev.ts",
-    "migrate:phase1": "tsx scripts/migrate-phase1.ts",
-    "migration:import-supabase": "tsx scripts/import-supabase.ts",
-    "migration:import-auth": "tsx scripts/import-supabase-auth.ts",
     "test": "tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -18,7 +15,6 @@
     "ai": "latest",
     "chat": "latest",
     "dotenv": "latest",
-    "firebase-admin": "^13.4.0",
     "zod": "latest"
   },
   "devDependencies": {

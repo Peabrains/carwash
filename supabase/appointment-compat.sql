@@ -1,4 +1,4 @@
--- Fields already used by the Firebase booking API and migration snapshot.
+-- Fields retained for booking compatibility and historical data imports.
 alter table appointments add column if not exists booking_request_id text;
 alter table appointments add column if not exists customer_id text;
 alter table appointments add column if not exists vehicle_id text;

@@ -4,7 +4,7 @@
 
 **Goal:** Make Docket/WashPoint safe for a controlled paid production pilot.
 
-**Architecture:** Keep GitHub Pages as the public frontend, Supabase Account B as the system of record, and Vercel as the server/API and Telegram runtime. Remove Firebase from active runtime paths, preserve only clearly isolated migration history, and add automated release gates around the frontend and bot.
+**Architecture:** Keep GitHub Pages as the public frontend, Supabase Account B as the system of record, and Vercel as the server/API and Telegram runtime. Keep the repository Supabase-only and add automated release gates around the frontend and bot.
 
 **Tech Stack:** Vite/PWA, Supabase Auth/Postgres/RPC, Vercel serverless functions, Telegram Chat SDK, Node test runner, GitHub Actions.
 
@@ -13,27 +13,27 @@
 ## Global Constraints
 
 - Supabase Account B and project `frfmbulazzvmxfclrjxj` remain the Docket production target.
-- No service-role keys, Telegram tokens, Firebase service accounts, or PATs may enter public client code or git.
+- No service-role keys, Telegram tokens, or PATs may enter public client code or git.
 - Booking confirmation must remain atomic and server-authoritative.
 - Preserve unrelated dirty-worktree changes.
 - Do not delete migration evidence without explicit authorization.
 
 ## Review Focus
 
-- Firebase runtime code: production booking paths must not import or call Firebase.
+- Production booking paths must use Supabase only.
 - Public booking: invalid, stale, duplicate, and concurrent booking requests must fail safely.
 - Tenant isolation: staff/provider access must remain scoped by provider and location.
 - PWA release freshness: root-domain assets and service-worker updates must work after deployment.
 - Production data: placeholder addresses/services must not be exposed to customers.
 
-### Task 1: Remove Firebase from runtime booking paths
+### Task 1: Remove legacy database runtime paths
 
 **Files:** `bot-ts/src/tier1-flow.ts`, `bot-ts/api/appointments.ts`, `bot-ts/package.json`, `bot-ts/package-lock.json`.
 
 - [ ] Write tests proving the Supabase booking context and atomic reservation are used.
-- [ ] Remove Firebase imports and fallback branches from runtime files.
-- [ ] Delete the obsolete Firebase appointment API or route it through the Supabase booking implementation.
-- [ ] Remove `firebase-admin` only after runtime imports are gone; retain migration scripts and historical export files untouched.
+- [x] Remove legacy database imports and fallback branches from runtime files.
+- [x] Route appointment booking through the Supabase implementation.
+- [x] Remove obsolete migration scripts and the legacy database dependency.
 - [ ] Run bot typecheck and tests.
 
 ### Task 2: Add production release gates
@@ -67,4 +67,3 @@
 - [ ] Verify Vercel catalog, slots, booking validation, manage-booking, and Telegram webhook responses.
 - [ ] Run a controlled end-to-end booking smoke test using a disposable/test slot.
 - [ ] Record unresolved items and pilot go/no-go criteria.
-
