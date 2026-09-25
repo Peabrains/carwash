@@ -42,6 +42,66 @@ create table if not exists public.provider_onboarding (
   updated_at timestamptz not null default now()
 );
 
+alter table public.provider_onboarding
+  add column if not exists current_step text not null default 'business',
+  add column if not exists completed_steps text[] not null default '{}',
+  add column if not exists completed_at timestamptz;
+
+alter table public.subscription_plans
+  add column if not exists pilot_free boolean not null default true,
+  add column if not exists display_rank integer not null default 0;
+
+alter table public.provider_subscriptions
+  add column if not exists pending_plan_id text references public.subscription_plans(id),
+  add column if not exists pending_effective_at timestamptz,
+  add column if not exists payment_provider text not null default 'pilot_free';
+
+create table if not exists public.provider_profiles (
+  provider_id text primary key references public.providers(id) on delete cascade,
+  legal_name text not null,
+  ssm_number text not null unique,
+  business_phone text not null,
+  marketplace_status text not null default 'not_submitted'
+    check (marketplace_status in ('not_submitted','pending_review','changes_requested','approved','rejected','suspended')),
+  operations_suspended boolean not null default false,
+  profile_version integer not null default 1 check (profile_version > 0),
+  reviewed_version integer,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.provider_verifications (
+  id uuid primary key default gen_random_uuid(),
+  provider_id text not null references public.providers(id) on delete cascade,
+  submission_version integer not null check (submission_version > 0),
+  ssm_document_path text not null,
+  storefront_photo_path text not null,
+  submitted_snapshot jsonb not null,
+  status text not null default 'pending_review'
+    check (status in ('pending_review','changes_requested','approved','rejected','suspended')),
+  decision_reason text not null default '',
+  submitted_by uuid not null references auth.users(id) on delete restrict,
+  reviewed_by uuid references auth.users(id) on delete restrict,
+  submitted_at timestamptz not null default now(),
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(provider_id, submission_version)
+);
+
+create table if not exists public.provider_plan_changes (
+  id uuid primary key default gen_random_uuid(),
+  provider_id text not null references public.providers(id) on delete cascade,
+  old_plan_id text references public.subscription_plans(id) on delete set null,
+  new_plan_id text not null references public.subscription_plans(id) on delete restrict,
+  effective_timing text not null check (effective_timing in ('immediate','renewal')),
+  status text not null check (status in ('pending','applied','cancelled','failed')),
+  actor_id uuid not null references auth.users(id) on delete restrict,
+  amount_myr numeric(10,2) not null default 0 check (amount_myr >= 0),
+  effective_at timestamptz,
+  applied_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.platform_audit_log (
   id uuid primary key default gen_random_uuid(),
   actor_id uuid,
@@ -86,4 +146,3 @@ values
   ('starter', 'Starter', 'For a single growing outlet.', 49, 1, 10, 500),
   ('growth', 'Growth', 'For providers operating multiple outlets.', 129, 5, 30, 2500)
 on conflict (id) do nothing;
-

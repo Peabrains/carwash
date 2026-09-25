@@ -38,6 +38,11 @@ create policy staff_read_provider on staff for select to authenticated
       and (me.role = 'platform_owner' or me.provider_id = staff.provider_id)
   ));
 
+-- Provider owners create their workspace through the atomic
+-- create_provider_workspace() RPC defined by the provider_self_onboarding
+-- migration. Direct browser inserts remain platform-owner-only. The paired
+-- get_provider_onboarding() RPC returns only the signed-in staff tenant.
+
 -- Staff creation now uses invite_staff_member(), which supports both existing
 -- Auth users and pending invitations. The obsolete upsert RPC is removed by
 -- the booking_security_notifications migration.
