@@ -1,7 +1,11 @@
+import { getSupabaseAccessToken } from './supabase.js';
+import { authorizationHeaders } from './auth-flow.js';
+
 const API = import.meta.env.VITE_PUBLIC_BOOKING_API_URL || 'https://carwash-bot.vercel.app/api/public';
 
 async function request(path, options) {
-  const response = await fetch(`${API}${path}`, { headers: { 'content-type': 'application/json' }, ...options });
+  const accessToken = await getSupabaseAccessToken();
+  const response = await fetch(`${API}${path}`, { ...options, headers: authorizationHeaders(accessToken) });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || 'The booking service is unavailable.');
   return body;

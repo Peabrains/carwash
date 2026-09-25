@@ -69,11 +69,96 @@ export async function updateStaffPassword(password) {
   return data;
 }
 
+export async function signUpCustomer(email, password) {
+  if (!supabase) throw new Error('Supabase Authentication is not configured.');
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim().toLowerCase(),
+    password,
+    options: { emailRedirectTo: `${redirectUrl()}#/account` },
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function signInCustomer(email, password) {
+  return signInStaffWithPassword(email, password);
+}
+
+export async function sendCustomerPasswordReset(email) {
+  if (!supabase) throw new Error('Supabase Authentication is not configured.');
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: `${redirectUrl()}?customer_reset=1` });
+  if (error) throw error;
+}
+
+export async function updateCustomerPassword(password) {
+  return updateStaffPassword(password);
+}
+
+export async function getCustomerProfile(user) {
+  if (!supabase || !user) return null;
+  const { data, error } = await supabase.from('customer_profiles').select('*').eq('user_id', user.id).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function saveCustomerProfile(user, values) {
+  if (!supabase || !user) throw new Error('Please sign in first.');
+  const { data, error } = await supabase.from('customer_profiles').upsert({
+    user_id: user.id,
+    name: String(values.name || '').trim(),
+    phone: String(values.phone || '').trim(),
+    preferences: values.preferences || {},
+    updated_at: new Date().toISOString(),
+  }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getCustomerVehicles(user) {
+  if (!supabase || !user) return [];
+  const { data, error } = await supabase.from('customer_vehicles').select('*').eq('user_id', user.id).order('is_default', { ascending: false }).order('created_at');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveCustomerVehicle(user, values) {
+  if (!supabase || !user) throw new Error('Please sign in first.');
+  const row = { user_id: user.id, plate: String(values.plate || '').trim().toUpperCase(), make_model: String(values.makeModel || '').trim(), category: String(values.category || '').trim() || null, is_default: Boolean(values.isDefault), updated_at: new Date().toISOString() };
+  if (row.is_default) {
+    const { error: defaultError } = await supabase.from('customer_vehicles').update({ is_default: false }).eq('user_id', user.id);
+    if (defaultError) throw defaultError;
+  }
+  const query = values.id ? supabase.from('customer_vehicles').update(row).eq('id', values.id).eq('user_id', user.id) : supabase.from('customer_vehicles').insert(row);
+  const { data, error } = await query.select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteCustomerVehicle(user, id) {
+  if (!supabase || !user) throw new Error('Please sign in first.');
+  const { error } = await supabase.from('customer_vehicles').delete().eq('id', id).eq('user_id', user.id);
+  if (error) throw error;
+}
+
+export async function getCustomerBookings(user) {
+  if (!supabase || !user) return [];
+  const { data, error } = await supabase.from('appointments').select('id,reference,provider_id,location_id,service_id,scheduled_at,scheduled_date,status,vehicle_plate,vehicle_make_model,price_myr,created_at').eq('customer_user_id', user.id).order('scheduled_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
 export async function getSupabaseUser() {
   if (!supabase) return null;
   const { data, error } = await supabase.auth.getUser();
   if (error && error.name !== 'AuthSessionMissingError') throw error;
   return data.user || null;
+}
+
+export async function getSupabaseAccessToken() {
+  if (!supabase) return '';
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  return data.session?.access_token || '';
 }
 
 export function watchSupabaseUser(callback) {
@@ -100,8 +185,9 @@ export async function finishSupabaseRedirect() {
   if (accessToken && refreshToken) {
     const { data, error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
     if (error) throw error;
-    const route = hashParams.get('type') === 'recovery' || url.searchParams.has('staff_reset') ? '#/staff/reset-password' : '#/';
+    const route = url.searchParams.has('customer_reset') ? '#/account/reset-password' : (hashParams.get('type') === 'recovery' || url.searchParams.has('staff_reset') ? '#/staff/reset-password' : '#/');
     url.searchParams.delete('staff_reset');
+    url.searchParams.delete('customer_reset');
     window.history.replaceState({}, document.title, `${url.pathname}${url.search}${route}`);
     return data.user || null;
   }

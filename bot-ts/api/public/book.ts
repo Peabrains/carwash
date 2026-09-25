@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { reserveSupabaseAppointment } from "../../src/supabase-booking.js";
-import { json, options } from "./_shared.js";
+import { publicSupabaseClient, reserveSupabaseAppointment } from "../../src/supabase-booking.js";
+import { json, options, verifiedCustomerId } from "./_shared.js";
 
 export async function OPTIONS() { return options(); }
 
@@ -17,7 +17,9 @@ export async function POST(request: Request) {
     const vehiclePlate = body.vehicle_plate?.trim() || "";
     const vehicleMakeModel = body.vehicle_make_model?.trim() || "";
     if (!/^[a-z0-9-]+$/.test(providerId) || !/^[a-z0-9-]+$/.test(locationId) || !/^[a-f0-9-]{20,}$/.test(serviceId) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time) || !name || !/^(?:01\d{8,9}|\+?601\d{8,9})$/.test(phone) || !vehiclePlate || !vehicleMakeModel) return json({ error: "Please provide your name, Malaysian phone number, car plate and car make/model." }, 400);
-    const result = await reserveSupabaseAppointment(`web:${randomUUID()}`, { step: "confirm", bookingRequestId: randomUUID(), serviceId, dateIso: date, time24h: time, customerName: name, customerPhone: phone, vehiclePlate, vehicleMakeModel }, { providerId, locationId }, "web");
+    const db = publicSupabaseClient();
+    const customerUserId = await verifiedCustomerId(request, db.auth);
+    const result = await reserveSupabaseAppointment(`web:${randomUUID()}`, { step: "confirm", bookingRequestId: randomUUID(), serviceId, dateIso: date, time24h: time, customerName: name, customerPhone: phone, vehiclePlate, vehicleMakeModel }, { providerId, locationId }, "web", customerUserId);
     if (result.status === "unavailable") return json({ error: "That slot is no longer available." }, 409);
     return json({ reference: result.reference, service: result.service }, result.status === "created" ? 201 : 200);
   } catch (error) {
