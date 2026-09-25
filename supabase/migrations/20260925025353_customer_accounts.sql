@@ -23,6 +23,8 @@ create table public.customer_vehicles (
 
 create unique index customer_vehicles_user_plate_idx
   on public.customer_vehicles(user_id, lower(trim(plate)));
+create unique index customer_vehicles_one_default_idx
+  on public.customer_vehicles(user_id) where is_default = true;
 
 alter table public.appointments
   add column customer_user_id uuid references auth.users(id) on delete set null;

@@ -30,6 +30,14 @@ begin
   ) then
     raise exception 'customer appointment history policy is missing';
   end if;
+  if not exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and tablename = 'customer_vehicles'
+      and indexname = 'customer_vehicles_one_default_idx'
+      and indexdef like '%UNIQUE%WHERE (is_default = true)%'
+  ) then
+    raise exception 'customer default vehicle uniqueness is missing';
+  end if;
   if exists (
     select 1 from information_schema.role_table_grants
     where table_schema = 'public'

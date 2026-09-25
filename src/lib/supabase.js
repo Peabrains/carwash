@@ -124,7 +124,10 @@ export async function getCustomerVehicles(user) {
 export async function saveCustomerVehicle(user, values) {
   if (!supabase || !user) throw new Error('Please sign in first.');
   const row = { user_id: user.id, plate: String(values.plate || '').trim().toUpperCase(), make_model: String(values.makeModel || '').trim(), category: String(values.category || '').trim() || null, is_default: Boolean(values.isDefault), updated_at: new Date().toISOString() };
-  if (row.is_default) await supabase.from('customer_vehicles').update({ is_default: false }).eq('user_id', user.id);
+  if (row.is_default) {
+    const { error: defaultError } = await supabase.from('customer_vehicles').update({ is_default: false }).eq('user_id', user.id);
+    if (defaultError) throw defaultError;
+  }
   const query = values.id ? supabase.from('customer_vehicles').update(row).eq('id', values.id).eq('user_id', user.id) : supabase.from('customer_vehicles').insert(row);
   const { data, error } = await query.select().single();
   if (error) throw error;
