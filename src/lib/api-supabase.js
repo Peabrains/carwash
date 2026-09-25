@@ -90,7 +90,7 @@ export async function saveProviderOnboardingStep(step, values = {}) {
     const response = await db.from('booking_settings').update({ ...payload, updated_at: new Date().toISOString() }).eq('provider_id', state.provider.id).eq('location_id', state.outlet.id).select().single();
     errorOrThrow(response.error, 'saving operating hours'); result = response.data;
   } else if (step === 'plan' && payload.plan_id) {
-    const response = await db.rpc('select_provider_pilot_plan', { p_plan_id: payload.plan_id });
+    const response = await db.rpc('change_provider_plan', { p_plan_id: payload.plan_id });
     errorOrThrow(response.error, 'saving provider plan'); result = response.data;
   }
   const completed = [...new Set([...(state.onboarding?.completed_steps || []), step])];
@@ -170,28 +170,17 @@ export async function simulateMockSubscription({ providerId, planId, outcome = '
 
 export async function getProviderBillingData() {
   const db = ensureSupabase();
-  const mockBilling = readMockBilling();
-  const mockSubscription = mockBilling.subscriptions[activeTenant.providerId];
-  const fallbackPlans = [
-    { id: 'trial', name: 'Trial', description: 'Try Docket with the core booking tools.', monthly_price_myr: 0, max_locations: 1, max_staff: 3, max_monthly_bookings: 100 },
-    { id: 'starter', name: 'Starter', description: 'For a single growing outlet.', monthly_price_myr: 49, max_locations: 1, max_staff: 10, max_monthly_bookings: 500 },
-    { id: 'growth', name: 'Growth', description: 'For providers operating multiple outlets.', monthly_price_myr: 129, max_locations: 5, max_staff: 30, max_monthly_bookings: 2500 },
-  ];
-  let subscription = null; let plans = []; let events = []; let schemaReady = true; let warning = '';
-  try {
-    const { data, error } = await db.from('provider_subscriptions').select('*').eq('provider_id', activeTenant.providerId).maybeSingle();
-    errorOrThrow(error, 'loading provider subscription'); subscription = data;
-  } catch (error) { schemaReady = false; warning = error?.message || 'Provider billing access is not configured yet.'; }
-  try {
-    const { data, error } = await db.from('subscription_plans').select('*').eq('is_active', true).order('monthly_price_myr');
-    errorOrThrow(error, 'loading billing plans'); plans = data || [];
-  } catch { plans = fallbackPlans; }
-  try {
-    const { data, error } = await db.from('platform_billing_events').select('*').eq('provider_id', activeTenant.providerId).order('occurred_at', { ascending: false }).limit(100);
-    errorOrThrow(error, 'loading billing events'); events = data || [];
-  } catch { schemaReady = false; }
-  return { subscription: mockSubscription || subscription, plans: plans.length ? plans : fallbackPlans, events: mockBilling.events.filter(item => item.provider_id === activeTenant.providerId).concat(mockSubscription ? [] : events), schemaReady, warning };
+  const [{ data: summary, error: summaryError }, { data: plans, error: planError }] = await Promise.all([
+    db.rpc('get_provider_plan_summary'),
+    db.from('subscription_plans').select('*').eq('is_active', true).order('display_rank'),
+  ]);
+  errorOrThrow(summaryError, 'loading provider plan');
+  errorOrThrow(planError, 'loading provider plans');
+  return { ...summary, plans: plans || [], schemaReady: true, warning: '' };
 }
+
+export async function changeProviderPlan(planId) { const db = ensureSupabase(); const { data, error } = await db.rpc('change_provider_plan', { p_plan_id: planId }); errorOrThrow(error, 'changing provider plan'); return data; }
+export async function cancelPendingProviderPlanChange() { const db = ensureSupabase(); const { data, error } = await db.rpc('cancel_pending_provider_plan_change'); errorOrThrow(error, 'cancelling pending plan change'); return data; }
 
 export async function saveSubscriptionPlan({ id, name, description = '', monthlyPriceMyr, maxLocations, maxStaff, maxMonthlyBookings, isActive = true }) {
   const db = ensureSupabase();

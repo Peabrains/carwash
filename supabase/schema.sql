@@ -70,6 +70,8 @@ create table appointments (
   payment_status text not null default 'unpaid'
     check (payment_status in ('unpaid','paid','refunded')),
   needs_attention boolean not null default false,  -- flagged when its bay goes down unplanned
+  is_test boolean not null default false,      -- excluded only when created by the platform owner
+  created_by uuid references auth.users(id) on delete set null,
   reference text unique not null,       -- customer-facing booking ref, e.g. WP-2026-08061020
   created_at timestamptz not null default now()
 );
