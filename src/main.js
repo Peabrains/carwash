@@ -2,6 +2,7 @@ import './style.css';
 import * as api from './lib/api.js';
 import { createBooking, loadCatalogue, loadSlots, manageBooking, searchAvailability } from './lib/public-booking.js';
 import { vehicleLabel } from './lib/appointment-display.js';
+import { oauthRedirectStarted } from './lib/auth-flow.js';
 
 // The generated registerSW.js only calls navigator.serviceWorker.register()
 // with no update-detection at all, so a new deploy's service worker sits
@@ -98,6 +99,7 @@ async function pageStaffLogin() {
     try {
       const result = await api.signInStaff();
       if (myGen !== renderGen) return;
+      if (oauthRedirectStarted(result)) return;
       if (result?.user || await api.getAuthUser?.()) {
         location.hash = '#/staff/board';
         router();
