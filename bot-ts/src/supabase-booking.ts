@@ -103,7 +103,7 @@ export async function availableSupabaseSlots(context: BookingContext, tenant: Te
   });
 }
 
-export async function reserveSupabaseAppointment(threadId: string, state: Tier1State, tenant: Tenant, channel: "telegram" | "web" = "telegram"): Promise<{ status: "created" | "existing"; reference: string; service: Service } | { status: "unavailable"; reference: string }> {
+export async function reserveSupabaseAppointment(threadId: string, state: Tier1State, tenant: Tenant, channel: "telegram" | "web" = "telegram", customerUserId: string | null = null): Promise<{ status: "created" | "existing"; reference: string; service: Service } | { status: "unavailable"; reference: string }> {
   if (!state.serviceId || !state.dateIso || !state.time24h || !state.customerName || !state.customerPhone || !state.vehiclePlate || !state.vehicleMakeModel) return { status: "unavailable", reference: "" };
   const db = client();
   const requestId = state.bookingRequestId || createHash("sha256").update([tenant.providerId, tenant.locationId, threadId, state.serviceId, state.dateIso, state.time24h].join("|")).digest("hex").slice(0, 32);
@@ -126,6 +126,10 @@ export async function reserveSupabaseAppointment(threadId: string, state: Tier1S
   fail(error, "reserving an appointment atomically");
   const row = Array.isArray(data) ? data[0] : data;
   if (!row || row.result_status === "unavailable") return { status: "unavailable", reference };
+  if (customerUserId && channel === "web") {
+    const { error: linkError } = await db.from("appointments").update({ customer_user_id: customerUserId }).eq("reference", String(row.appointment_reference || reference)).eq("channel", "web").is("customer_user_id", null);
+    fail(linkError, "linking customer account to booking");
+  }
   if (!row.result_service_id || !row.result_service_name) throw new Error("Supabase atomic booking returned an incomplete service");
   const service: Service = {
     id: String(row.result_service_id),

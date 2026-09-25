@@ -1,9 +1,23 @@
 export function cors(response: Response) {
   const headers = new Headers(response.headers);
   headers.set("Access-Control-Allow-Origin", "*");
-  headers.set("Access-Control-Allow-Headers", "content-type");
+  headers.set("Access-Control-Allow-Headers", "content-type, authorization");
   headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+export function bearerToken(request: Request) {
+  const match = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || "";
+}
+
+type CustomerAuth = { getUser(token: string): Promise<{ data: { user: { id: string } | null }; error: unknown }> };
+
+export async function verifiedCustomerId(request: Request, auth: CustomerAuth) {
+  const token = bearerToken(request);
+  if (!token) return null;
+  const { data, error } = await auth.getUser(token);
+  return error ? null : data.user?.id || null;
 }
 
 export function options() { return cors(new Response(null, { status: 204 })); }

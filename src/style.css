@@ -565,7 +565,31 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .btn.secondary{background:#FCFCF8;color:#12343A;border-color:#D2DDD5;}
 .btn.secondary:hover{background:#EEF7F1;}
 
+/* Customer account */
+.customer-account-shell{min-height:100vh;background:#F7F8EF;}
+.customer-account-screen{max-width:980px;margin:0 auto;padding-top:42px;padding-bottom:70px;}
+.customer-account-screen>h1{font-family:'Fraunces',Georgia,serif;font-size:clamp(38px,7vw,64px);line-height:1;margin:8px 0 12px;color:#12343A;}
+.account-auth-grid,.account-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px;align-items:start;}
+.account-card,.account-section{padding:22px;background:#FCFCF8;border-color:#D2DDD5;}
+.account-card h3,.account-section h2{margin:0 0 14px;font-family:'Fraunces',Georgia,serif;color:#12343A;}
+.account-card .btn,.account-section .btn{margin-top:14px;}
+.text-button{appearance:none;border:0;background:transparent;color:#28705E;font:700 12px inherit;cursor:pointer;padding:8px 0;}
+.reset-request{max-width:480px;margin-top:16px;}
+.customer-account-content{display:grid;gap:16px;margin-top:24px;}
+.account-section-head{display:flex;align-items:start;justify-content:space-between;gap:16px;}
+.account-section-head .lead{margin:3px 0 0;}
+.account-bookings{display:grid;gap:8px;}
+.account-booking{display:grid;grid-template-columns:minmax(160px,1.5fr) 1fr 1fr auto;align-items:center;gap:14px;padding:13px 0;border-top:1px solid #E4EAE4;}
+.account-booking strong,.account-booking span,.account-booking small{display:block;}
+.account-booking small{margin-top:3px;color:#71817C;font-size:10px;}
+.vehicle-list{display:grid;gap:8px;margin-bottom:16px;}
+.saved-vehicle{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;padding:10px;border:1px solid #E4EAE4;border-radius:10px;background:#F4F6F0;}
+.saved-vehicle strong,.saved-vehicle small{display:block;}.saved-vehicle small{margin-top:2px;color:#71817C;}.saved-vehicle>span{padding:4px 7px;border-radius:999px;background:#DDF0E5;color:#28705E;font-size:9px;font-weight:800;}
+.customer-topbar-actions{display:flex;align-items:center;gap:16px;}
+.booking-sheet select{box-sizing:border-box;width:100%;padding:12px;border:1px solid #D8E1DA;border-radius:9px;background:#FCFCF8;color:#12343A;font:inherit;}
+
 @media (max-width:700px){
+  .customer-account-screen{padding-top:26px;}.account-auth-grid,.account-grid{grid-template-columns:1fr;}.account-booking{grid-template-columns:1fr 1fr;}.account-booking>strong{grid-column:1/-1;}.account-section-head{display:block;}.customer-topbar-actions{gap:8px;}.customer-topbar-actions .topbar-link{font-size:10px;}
   .screen{padding-left:16px;padding-right:16px;}
   .topbar{grid-template-columns:auto minmax(0,1fr) auto;padding:11px 12px;gap:8px;}
   .topbar .brand{font-size:13px;}
