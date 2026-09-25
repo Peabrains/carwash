@@ -3,28 +3,19 @@ import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { activeProviders } from "../src/tier1-flow.js";
 
-test("Telegram provider menu filters the providers status column", async () => {
-  const filters: Array<[string, unknown]> = [];
+test("Telegram provider menu uses the approved marketplace set", async () => {
+  const rows: Record<string, unknown[]> = {
+    providers: [{ id: "washpoint", name: "WashPoint", description: "", status: "active" }, { id: "pending", name: "Pending", description: "", status: "active" }],
+    provider_profiles: [{ provider_id: "washpoint", marketplace_status: "approved", operations_suspended: false }, { provider_id: "pending", marketplace_status: "pending_review", operations_suspended: false }],
+    provider_onboarding: [{ provider_id: "washpoint", status: "active" }, { provider_id: "pending", status: "ready" }],
+  };
   const db = {
     from(table: string) {
-      assert.equal(table, "providers");
-      return {
-        select() {
-          return {
-            eq(column: string, value: unknown) {
-              filters.push([column, value]);
-              return {
-                order: async () => ({ data: [{ id: "washpoint", name: "WashPoint" }], error: null }),
-              };
-            },
-          };
-        },
-      };
+      return { select: async () => ({ data: rows[table], error: null }) };
     },
   } as unknown as SupabaseClient;
 
   const providers = await activeProviders(db);
 
-  assert.deepEqual(filters, [["status", "active"]]);
-  assert.deepEqual(providers, [{ id: "washpoint", name: "WashPoint" }]);
+  assert.deepEqual(providers, [{ id: "washpoint", name: "WashPoint", description: "", marketplaceVerified: true }]);
 });

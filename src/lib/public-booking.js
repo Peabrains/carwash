@@ -11,8 +11,9 @@ async function request(path, options) {
   return body;
 }
 
-export const loadCatalogue = () => request('/catalog');
-export const searchAvailability = ({ date, time = '' }) => request(`/search?date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`);
-export const loadSlots = ({ providerId, locationId, serviceId, date }) => request(`/slots?provider_id=${encodeURIComponent(providerId)}&location_id=${encodeURIComponent(locationId)}&service_id=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(date)}`);
+const privateScope = providerId => providerId ? `&provider=${encodeURIComponent(providerId)}&access=private` : '';
+export const loadCatalogue = ({ privateProviderId = '' } = {}) => request(`/catalog?${privateProviderId ? `provider=${encodeURIComponent(privateProviderId)}&access=private` : ''}`);
+export const searchAvailability = ({ date, time = '', privateProviderId = '' }) => request(`/search?date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}${privateScope(privateProviderId)}`);
+export const loadSlots = ({ providerId, locationId, serviceId, date, privateAccess = false }) => request(`/slots?provider_id=${encodeURIComponent(providerId)}&location_id=${encodeURIComponent(locationId)}&service_id=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(date)}${privateAccess ? '&access=private' : ''}`);
 export const createBooking = details => request('/book', { method: 'POST', body: JSON.stringify(details) });
 export const manageBooking = details => request('/manage', { method: 'POST', body: JSON.stringify(details) });

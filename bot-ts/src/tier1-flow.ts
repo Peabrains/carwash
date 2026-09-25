@@ -4,6 +4,7 @@ import type { Channel, Thread } from "chat";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Actions, Button, Card, CardText } from "chat";
 import { availableSupabaseSlots, loadSupabaseBookingContext, publicSupabaseClient, reserveSupabaseAppointment } from "./supabase-booking.js";
+import { listMarketplaceProviders } from "./public-provider-access.js";
 
 export type Tier1State = {
   step: "provider" | "location" | "service" | "date" | "time" | "name" | "phone" | "plate" | "vehicle" | "confirm" | "submitting" | "completed";
@@ -45,9 +46,7 @@ type Provider = { id: string; name: string };
 type Location = { id: string; name: string; provider_id: string };
 
 export async function activeProviders(db: SupabaseClient = publicSupabaseClient()): Promise<Provider[]> {
-  const { data, error } = await db.from("providers").select("id,name").eq("status", "active").order("name");
-  if (error) throw new Error(`Supabase loading providers failed: ${error.message}`);
-  return (data || []).map(row => ({ id: String(row.id), name: String(row.name) }));
+  return listMarketplaceProviders(db);
 }
 
 async function activeLocations(providerId: string): Promise<Location[]> {

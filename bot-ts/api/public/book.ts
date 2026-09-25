@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { publicSupabaseClient, reserveSupabaseAppointment } from "../../src/supabase-booking.js";
 import { json, options, verifiedCustomerId } from "./_shared.js";
+import { assertMarketplaceProviderBookable, assertPrivateProviderBookable } from "../../src/public-provider-access.js";
 
 export async function OPTIONS() { return options(); }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { provider_id?: string; location_id?: string; service_id?: string; date?: string; time?: string; name?: string; phone?: string; vehicle_plate?: string; vehicle_make_model?: string };
+    const body = await request.json() as { provider_id?: string; location_id?: string; service_id?: string; date?: string; time?: string; name?: string; phone?: string; vehicle_plate?: string; vehicle_make_model?: string; access?: string };
     const providerId = body.provider_id || "";
     const locationId = body.location_id || "";
     const serviceId = body.service_id || "";
@@ -18,6 +19,8 @@ export async function POST(request: Request) {
     const vehicleMakeModel = body.vehicle_make_model?.trim() || "";
     if (!/^[a-z0-9-]+$/.test(providerId) || !/^[a-z0-9-]+$/.test(locationId) || !/^[a-f0-9-]{20,}$/.test(serviceId) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time) || !name || !/^(?:01\d{8,9}|\+?601\d{8,9})$/.test(phone) || !vehiclePlate || !vehicleMakeModel) return json({ error: "Please provide your name, Malaysian phone number, car plate and car make/model." }, 400);
     const db = publicSupabaseClient();
+    if (body.access === "private") await assertPrivateProviderBookable(db, providerId);
+    else await assertMarketplaceProviderBookable(db, providerId);
     const customerUserId = await verifiedCustomerId(request, db.auth);
     const result = await reserveSupabaseAppointment(`web:${randomUUID()}`, { step: "confirm", bookingRequestId: randomUUID(), serviceId, dateIso: date, time24h: time, customerName: name, customerPhone: phone, vehiclePlate, vehicleMakeModel }, { providerId, locationId }, "web", customerUserId);
     if (result.status === "unavailable") return json({ error: "That slot is no longer available." }, 409);
