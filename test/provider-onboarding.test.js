@@ -6,6 +6,7 @@ import {
   nextOnboardingStep,
   canApplyPlanChange,
   formatPlanPrice,
+  buildOnboardingPresentation,
 } from '../src/lib/provider-onboarding.js';
 
 function installBrowserStubs() {
@@ -116,4 +117,23 @@ test('onboarding step payloads allow only fields owned by each step', async () =
     p_ssm_number: '202601234567-A', p_business_phone: '012-3456789',
   });
   assert.throws(() => buildProviderOnboardingStepPayload('unknown', {}), /Unknown onboarding step/);
+});
+
+test('onboarding presentation resumes at the first missing step and labels pilot plans', () => {
+  const model = buildOnboardingPresentation({
+    onboarding: { completed_steps: ['business', 'outlet'] },
+    profile: { business_phone: '0123456789' },
+    outlet: { address: 'Miri' },
+    hoursComplete: true,
+    bookingRulesComplete: true,
+    activeBays: 1,
+    activeServices: 1,
+    plan: { id: 'starter' },
+    verification: { status: 'pending_review' },
+    plans: [{ id: 'starter', monthly_price_myr: 0, pilot_free: true }],
+  });
+  assert.equal(model.currentStep, 'hours');
+  assert.equal(model.readiness.operationalReady, true);
+  assert.equal(model.readiness.marketplaceReady, false);
+  assert.deepEqual(model.plans, [{ id: 'starter', monthly_price_myr: 0, pilot_free: true, priceLabel: 'Free during pilot' }]);
 });

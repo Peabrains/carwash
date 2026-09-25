@@ -6,6 +6,7 @@ import { oauthRedirectStarted } from './lib/auth-flow.js';
 import { groupCustomerBookings, normalizeCustomerProfile } from './lib/customer-account.js';
 import * as customerAuth from './lib/supabase.js';
 import { dismissTransientOverlays } from './lib/transient-overlays.js';
+import { buildOnboardingPresentation, ONBOARDING_STEPS } from './lib/provider-onboarding.js';
 
 // The generated registerSW.js only calls navigator.serviceWorker.register()
 // with no update-detection at all, so a new deploy's service worker sits
@@ -374,17 +375,18 @@ async function pageStaffBoard(dateISO) {
   const date = dateISO || localDateISO(new Date());
   const isToday = date === localDateISO(new Date());
 
-  let bays, appts, settings, breaks, closures;
+  let bays, appts, settings, breaks, closures, onboardingData;
   try {
     const read = (label, operation) => operation().catch(error => {
       throw new Error(`${label}: ${error?.code || error?.message || 'read failed'}`);
     });
-    [bays, appts, settings, breaks, closures] = await Promise.all([
+    [bays, appts, settings, breaks, closures, onboardingData] = await Promise.all([
       read('bays', () => api.getActiveBays()),
       read('appointments', () => api.getAppointmentsForDate(date)),
       read('booking settings', () => api.getBookingSettings()),
       read('crew breaks', () => api.getCrewBreaks()),
       read('bay outages', () => api.getBayClosuresForDate(date)),
+      staff.role === 'owner' ? api.getProviderOnboarding().catch(() => null) : Promise.resolve(null),
     ]);
   } catch (error) {
     if (myGen !== renderGen) return;
@@ -432,6 +434,8 @@ async function pageStaffBoard(dateISO) {
   const inProgressCount = liveBookings.filter(a => a.status === 'in_progress').length;
   const completedCount = liveBookings.filter(a => a.status === 'completed').length;
   const bookedValue = liveBookings.reduce((sum, a) => sum + Number(a.price_myr || 0), 0);
+  const onboardingModel = onboardingData ? buildOnboardingPresentation(onboardingReadinessInput(onboardingData)) : null;
+  const readinessBanner = onboardingModel ? `<section class="provider-readiness-banner"><div><span>Operations</span><strong>${onboardingModel.readiness.operationalReady ? 'Ready' : 'Setup incomplete'}</strong></div><div><span>Private bookings</span><strong>${onboardingModel.readiness.operationalReady ? 'Available' : 'Not ready'}</strong></div><div><span>Marketplace</span><strong>${onboardingModel.readiness.marketplaceReady ? 'Approved' : 'Not approved yet'}</strong></div>${onboardingModel.readiness.operationalReady ? '' : '<a class="btn compact" href="#/provider/onboarding">Continue setup</a>'}</section>` : '';
 
   const heads = bays.map(b => {
     const bookings = byBay[b.id] || [];
@@ -487,6 +491,7 @@ async function pageStaffBoard(dateISO) {
   }).join('');
 
   app.innerHTML = shell('board', `
+    ${readinessBanner}
     <header class="board-page-head">
       <div><div class="eyebrow">Daily operations</div><h2>Bay board</h2><p class="lead">Bookings, bay capacity and issues for one working day.</p></div>
       <div class="date-nav">
@@ -1085,7 +1090,7 @@ async function pageStaffOrganization() {
 
 function pageCustomerLanding() {
   app.innerHTML = `<div class="app-shell landing-shell">
-    <div class="topbar landing-topbar"><div class="brand"><div class="drop"></div> Docket</div><a class="topbar-link" href="#/staff/login">Provider & staff sign in</a></div>
+    <div class="topbar landing-topbar"><div class="brand"><div class="drop"></div> Docket</div><div class="customer-topbar-actions"><a class="topbar-link" href="#/provider/register">Register your car wash</a><a class="topbar-link" href="#/staff/login">Provider & staff sign in</a></div></div>
     <main class="screen landing-screen">
       <section class="landing-hero" aria-labelledby="landing-title">
         <div class="eyebrow">Car wash bookings, made simple</div>
@@ -1107,6 +1112,80 @@ function pageCustomerLanding() {
       </section>
     </main>
   </div>`;
+}
+
+const onboardingLabels = { business: 'Business', outlet: 'First outlet', hours: 'Hours & rules', bays: 'Bays', services: 'Services', plan: 'Plan', review: 'Review' };
+const onboardingRoute = step => `#/provider/onboarding?step=${encodeURIComponent(step)}`;
+
+function providerAuthShell(content) {
+  return `<div class="app-shell provider-auth-shell"><div class="topbar"><a class="brand" href="#/"><div class="drop"></div>Docket</a><a class="topbar-link" href="#/staff/login">Provider sign in</a></div><main class="screen provider-auth-screen">${content}</main></div>`;
+}
+
+async function pageProviderRegister() {
+  app.innerHTML = providerAuthShell(`<div class="provider-auth-copy"><div class="eyebrow">For car wash businesses</div><h1>Run bookings from one place.</h1><p class="lead">Create your provider account, verify your email, then set up your first outlet. No payment is collected while Docket is in pilot.</p></div><form id="providerRegisterForm" class="card provider-register-card"><h2>Register your car wash</h2><div class="field"><label for="providerOwnerEmail">Work email</label><input id="providerOwnerEmail" type="email" autocomplete="email" required></div><div class="field"><label for="providerOwnerPassword">Password</label><input id="providerOwnerPassword" type="password" autocomplete="new-password" minlength="8" required></div><button class="btn" type="submit">Create provider account</button><p class="provider-form-note">You must verify your email before setup. Marketplace listing is separate and requires a later SSM review.</p><p id="providerRegisterMessage" class="lead" role="status"></p></form>`);
+  document.getElementById('providerRegisterForm').onsubmit = async event => {
+    event.preventDefault(); const button = event.currentTarget.querySelector('button'); const message = document.getElementById('providerRegisterMessage'); button.disabled = true; message.textContent = 'Creating your account…';
+    try { const result = await api.signUpProviderOwner({ email: document.getElementById('providerOwnerEmail').value, password: document.getElementById('providerOwnerPassword').value }); if (result?.session) { location.hash = '#/provider/onboarding'; router(); } else message.textContent = 'Check your email and tap the verification link. It will bring you back to continue setup.'; }
+    catch (error) { message.textContent = error?.message || 'Could not create the provider account.'; }
+    finally { button.disabled = false; }
+  };
+}
+
+function onboardingReadinessInput(data) {
+  const settings = data.settings || {};
+  return {
+    ...data,
+    hoursComplete: Boolean(settings.weekday_open && settings.weekday_close && settings.weekend_open && settings.weekend_close),
+    bookingRulesComplete: [settings.min_lead_minutes, settings.max_advance_days, settings.buffer_minutes].every(value => Number.isFinite(Number(value))),
+    activeBays: (data.bays || []).filter(item => item.is_active !== false).length,
+    activeServices: (data.services || []).filter(item => item.is_active !== false).length,
+    plan: data.plans?.find(item => item.id === data.subscription?.plan_id) || null,
+  };
+}
+
+function renderOnboardingStep(step, data, model) {
+  const settings = data.settings || {}; const outlet = data.outlet || {}; const profile = data.profile || {};
+  if (step === 'business') return `<div class="onboarding-fields"><div class="field"><label for="onboardLegalName">Registered business name</label><input id="onboardLegalName" value="${h(profile.legal_name || '')}" required></div><div class="field"><label for="onboardBusinessPhone">Business phone</label><input id="onboardBusinessPhone" value="${h(profile.business_phone || '')}" autocomplete="tel" required></div><div class="field"><label>SSM registration</label><input value="${h(profile.ssm_number || '')}" disabled><small>Contact Docket support if this registration number must change.</small></div></div>`;
+  if (step === 'outlet') return `<div class="onboarding-fields"><div class="field"><label for="onboardOutletName">Outlet name</label><input id="onboardOutletName" value="${h(outlet.name || 'Main outlet')}" required></div><div class="field field-wide"><label for="onboardOutletAddress">Full address</label><textarea id="onboardOutletAddress" rows="3" required>${h(outlet.address || '')}</textarea></div><div class="field"><label for="onboardTimezone">Timezone</label><select id="onboardTimezone"><option value="Asia/Kuala_Lumpur">Malaysia (GMT+8)</option></select></div></div>`;
+  if (step === 'hours') return `<div class="onboarding-fields"><div class="field"><label for="onboardWeekdayOpen">Weekday opens</label><input id="onboardWeekdayOpen" type="time" value="${h(String(settings.weekday_open || '08:00').slice(0,5))}"></div><div class="field"><label for="onboardWeekdayClose">Weekday closes</label><input id="onboardWeekdayClose" type="time" value="${h(String(settings.weekday_close || '19:00').slice(0,5))}"></div><div class="field"><label for="onboardWeekendOpen">Weekend opens</label><input id="onboardWeekendOpen" type="time" value="${h(String(settings.weekend_open || '08:00').slice(0,5))}"></div><div class="field"><label for="onboardWeekendClose">Weekend closes</label><input id="onboardWeekendClose" type="time" value="${h(String(settings.weekend_close || '19:00').slice(0,5))}"></div><div class="field"><label for="onboardLead">Minimum notice (minutes)</label><input id="onboardLead" type="number" min="0" value="${h(settings.min_lead_minutes ?? 60)}"></div><div class="field"><label for="onboardAdvance">Days bookable ahead</label><input id="onboardAdvance" type="number" min="1" value="${h(settings.max_advance_days ?? 14)}"></div><div class="field"><label for="onboardBuffer">Buffer between bookings</label><input id="onboardBuffer" type="number" min="0" value="${h(settings.buffer_minutes ?? 15)}"></div></div>`;
+  if (step === 'bays') return `<div class="onboarding-list">${(data.bays || []).map(item => `<span><strong>${h(item.name)}</strong><small>${item.is_active === false ? 'Inactive' : 'Active'}</small></span>`).join('') || '<p class="lead">Add at least one bay or wash station.</p>'}</div><div class="field"><label for="onboardBayName">New bay name</label><input id="onboardBayName" placeholder="Bay 1"></div>`;
+  if (step === 'services') return `<div class="onboarding-list">${(data.services || []).map(item => `<span><strong>${h(item.name)}</strong><small>${item.duration_minutes} min · RM ${Number(item.price_myr || 0).toFixed(2)}</small></span>`).join('') || '<p class="lead">Add at least one service customers can book.</p>'}</div><div class="onboarding-fields"><div class="field"><label for="onboardServiceName">Service name</label><input id="onboardServiceName" placeholder="Basic wash"></div><div class="field"><label for="onboardServiceDuration">Duration (minutes)</label><input id="onboardServiceDuration" type="number" min="5" step="5" value="30"></div><div class="field"><label for="onboardServicePrice">Price (RM)</label><input id="onboardServicePrice" type="number" min="0" step="0.01" value="20"></div></div>`;
+  if (step === 'plan') return `<div class="onboarding-plans">${model.plans.map(plan => `<label class="onboarding-plan"><input type="radio" name="onboardPlan" value="${h(plan.id)}" ${data.subscription?.plan_id === plan.id ? 'checked' : ''}><span><strong>${h(plan.name)}</strong><b>${h(plan.priceLabel)}</b><small>${h(plan.description || '')}</small><em>${plan.max_locations ?? 'Unlimited'} outlet · ${plan.max_staff ?? 'Unlimited'} staff · ${plan.max_monthly_bookings ?? 'Unlimited'} bookings/month</em></span></label>`).join('')}</div>`;
+  const operationalMissing = model.readiness.missing.filter(item => item !== 'marketplace verification');
+  return `<div class="onboarding-review"><div class="readiness-card ${model.readiness.operationalReady ? 'ready' : ''}"><strong>${model.readiness.operationalReady ? 'Operational setup complete' : 'Finish your operational setup'}</strong><p>${model.readiness.operationalReady ? 'You can use the dashboard and accept private or manual bookings.' : 'Complete the items below before opening your dashboard.'}</p></div>${operationalMissing.map(item => `<a href="${onboardingRoute(({ 'business phone':'business','outlet address':'outlet','operating hours':'hours','booking rules':'hours','active bay':'bays','active service':'services','plan':'plan' })[item] || 'business')}">Fix ${h(item)} →</a>`).join('')}<div class="readiness-card"><strong>Marketplace review: ${h(data.profile?.marketplace_status?.replaceAll('_',' ') || 'not submitted')}</strong><p>This does not stop you using Docket privately. Submit SSM evidence later to appear in customer discovery.</p></div></div>`;
+}
+
+async function pageProviderOnboarding() {
+  const myGen = ++renderGen;
+  try { await api.finishStaffRedirect?.(); } catch {}
+  const user = await api.getAuthUser();
+  if (!user) { location.hash = '#/provider/register'; return; }
+  if (!user.email_confirmed_at) { app.innerHTML = providerAuthShell('<div class="provider-auth-copy"><div class="eyebrow">Verify your email</div><h1>Check your inbox.</h1><p class="lead">Open the Docket verification email first, then return here to continue setup.</p><button class="btn secondary" id="providerSignOut">Use a different email</button></div>'); document.getElementById('providerSignOut').onclick = async () => { await api.signOutStaff(); location.hash = '#/provider/register'; }; return; }
+  let data;
+  try { data = await api.getProviderOnboarding(); } catch (error) { app.innerHTML = providerAuthShell(`<div class="provider-auth-copy"><h1>We couldn't load setup.</h1><p class="lead">${h(error?.message || 'Please try again.')}</p><button class="btn" id="retryOnboarding">Try again</button></div>`); document.getElementById('retryOnboarding').onclick = pageProviderOnboarding; return; }
+  if (myGen !== renderGen) return;
+  if (!data) {
+    app.innerHTML = providerAuthShell(`<div class="provider-auth-copy"><div class="eyebrow">Step 1 of 7</div><h1>Tell us about your business.</h1><p class="lead">This creates one private provider workspace and one first outlet. Your store will not appear in the public marketplace until a later review.</p></div><form id="providerWorkspaceForm" class="card provider-register-card"><div class="field"><label for="workspaceTradingName">Trading name</label><input id="workspaceTradingName" required placeholder="Example Car Wash"></div><div class="field"><label for="workspaceLegalName">Registered business name</label><input id="workspaceLegalName" required></div><div class="field"><label for="workspaceSsm">SSM registration number</label><input id="workspaceSsm" required></div><div class="field"><label for="workspacePhone">Business phone</label><input id="workspacePhone" required autocomplete="tel"></div><button class="btn" type="submit">Create workspace</button><p id="workspaceMessage" class="lead" role="status"></p></form>`);
+    document.getElementById('providerWorkspaceForm').onsubmit = async event => { event.preventDefault(); const button = event.currentTarget.querySelector('button'); const message = document.getElementById('workspaceMessage'); button.disabled = true; try { await api.createProviderWorkspace({ tradingName: document.getElementById('workspaceTradingName').value, legalName: document.getElementById('workspaceLegalName').value, ssmNumber: document.getElementById('workspaceSsm').value, businessPhone: document.getElementById('workspacePhone').value }); location.hash = onboardingRoute('outlet'); router(); } catch (error) { message.textContent = error?.message || 'Could not create the workspace.'; button.disabled = false; } };
+    return;
+  }
+  const input = onboardingReadinessInput(data); const model = buildOnboardingPresentation(input);
+  const requested = new URLSearchParams((location.hash.split('?')[1] || '')).get('step'); const step = ONBOARDING_STEPS.includes(requested) ? requested : model.currentStep; const index = ONBOARDING_STEPS.indexOf(step);
+  app.innerHTML = `<div class="app-shell onboarding-shell"><div class="topbar"><a class="brand" href="#/"><div class="drop"></div>Docket</a><button class="topbar-link text-button" id="leaveOnboarding" type="button">Save and leave</button></div><main class="screen onboarding-screen"><header class="onboarding-head"><div><div class="eyebrow">Provider setup</div><h1>${h(onboardingLabels[step])}</h1><p class="lead">${index + 1} of ${ONBOARDING_STEPS.length} · Your progress is saved after every step.</p></div><strong>${Math.round(((index + 1) / ONBOARDING_STEPS.length) * 100)}%</strong></header><div class="onboarding-progress">${ONBOARDING_STEPS.map((item, itemIndex) => `<a href="${onboardingRoute(item)}" class="${item === step ? 'active' : ''} ${itemIndex < index ? 'done' : ''}"><span>${itemIndex + 1}</span>${h(onboardingLabels[item])}</a>`).join('')}</div><section class="card onboarding-card">${renderOnboardingStep(step, data, model)}<p id="onboardingMessage" class="lead" role="status"></p></section><footer class="onboarding-actions">${index ? `<a class="btn secondary" href="${onboardingRoute(ONBOARDING_STEPS[index - 1])}">Back</a>` : '<span></span>'}<button class="btn" id="saveOnboardingStep" type="button">${step === 'review' ? 'Finish setup' : 'Save and continue'}</button></footer></main></div>`;
+  document.getElementById('leaveOnboarding').onclick = () => { location.hash = '#/staff/board'; };
+  document.getElementById('saveOnboardingStep').onclick = async event => {
+    const button = event.currentTarget; const message = document.getElementById('onboardingMessage'); button.disabled = true; message.textContent = 'Saving…';
+    try {
+      if (step === 'business') await api.saveProviderOnboardingStep(step, { legal_name: document.getElementById('onboardLegalName').value, business_phone: document.getElementById('onboardBusinessPhone').value });
+      else if (step === 'outlet') await api.saveProviderOnboardingStep(step, { name: document.getElementById('onboardOutletName').value, address: document.getElementById('onboardOutletAddress').value, timezone: document.getElementById('onboardTimezone').value });
+      else if (step === 'hours') await api.saveProviderOnboardingStep(step, { weekday_open: document.getElementById('onboardWeekdayOpen').value, weekday_close: document.getElementById('onboardWeekdayClose').value, weekend_open: document.getElementById('onboardWeekendOpen').value, weekend_close: document.getElementById('onboardWeekendClose').value, min_lead_minutes: Number(document.getElementById('onboardLead').value), max_advance_days: Number(document.getElementById('onboardAdvance').value), buffer_minutes: Number(document.getElementById('onboardBuffer').value) });
+      else if (step === 'bays') { const name = document.getElementById('onboardBayName').value.trim(); if (name) await api.saveBay({ name }); if (!(data.bays || []).some(item => item.is_active !== false) && !name) throw new Error('Add at least one active bay.'); await api.saveProviderOnboardingStep(step); }
+      else if (step === 'services') { const name = document.getElementById('onboardServiceName').value.trim(); if (name) await api.saveService({ name, durationMinutes: document.getElementById('onboardServiceDuration').value, priceMyr: document.getElementById('onboardServicePrice').value }); if (!(data.services || []).some(item => item.is_active !== false) && !name) throw new Error('Add at least one active service.'); await api.saveProviderOnboardingStep(step); }
+      else if (step === 'plan') { const planId = document.querySelector('[name="onboardPlan"]:checked')?.value; if (!planId) throw new Error('Choose a pilot plan.'); await api.saveProviderOnboardingStep(step, { plan_id: planId }); }
+      else { if (!model.readiness.operationalReady) throw new Error('Complete the missing operational items first.'); await api.completeProviderOnboarding(); location.hash = '#/staff/board'; router(); return; }
+      location.hash = onboardingRoute(ONBOARDING_STEPS[index + 1] || 'review'); router();
+    } catch (error) { message.textContent = error?.message || 'Could not save this step.'; button.disabled = false; }
+  };
 }
 
 async function pageCustomerAccountEntry() {
@@ -1234,6 +1313,8 @@ const routes = {
   '#/account/login': pageCustomerAccountEntry,
   '#/account/reset-password': pageCustomerPasswordReset,
   '#/account': pageCustomerAccount,
+  '#/provider/register': pageProviderRegister,
+  '#/provider/onboarding': pageProviderOnboarding,
   '#/staff/login': pageStaffLogin,
   '#/staff/setup': pageStaffSetup,
   '#/staff/reset-password': pageStaffPasswordReset,

@@ -24,7 +24,7 @@ async function rows(table, columns = '*') { const db = ensureSupabase(); const {
 const ONBOARDING_STEP_FIELDS = Object.freeze({
   business: ['legal_name', 'business_phone'],
   outlet: ['name', 'address', 'timezone'],
-  hours: ['weekday_open', 'weekday_close', 'weekend_open', 'weekend_close'],
+  hours: ['weekday_open', 'weekday_close', 'weekend_open', 'weekend_close', 'min_lead_minutes', 'max_advance_days', 'buffer_minutes'],
   bays: [],
   services: [],
   plan: ['plan_id'],
@@ -62,8 +62,16 @@ export async function getProviderOnboarding() {
   const db = ensureSupabase();
   const { data, error } = await db.rpc('get_provider_onboarding');
   errorOrThrow(error, 'loading provider onboarding');
-  if (data?.provider?.id && data?.outlet?.id) setActiveTenant(data.provider.id, data.outlet.id);
-  return data;
+  if (!data) return null;
+  if (data.provider?.id && data.outlet?.id) setActiveTenant(data.provider.id, data.outlet.id);
+  const [{ data: plans, error: planError }, settings, bays, services] = await Promise.all([
+    db.from('subscription_plans').select('*').eq('is_active', true).order('display_rank'),
+    getBookingSettings(),
+    getActiveBays({ includeInactive: true }),
+    getServices({ includeInactive: true }),
+  ]);
+  errorOrThrow(planError, 'loading onboarding plans');
+  return { ...data, plans: plans || [], settings, bays, services };
 }
 
 export async function saveProviderOnboardingStep(step, values = {}) {

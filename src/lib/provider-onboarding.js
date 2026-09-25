@@ -52,3 +52,12 @@ export function formatPlanPrice(plan = {}) {
   if (plan.pilot_free) return 'Free during pilot';
   return `RM ${Number(plan.monthly_price_myr || 0).toFixed(2)}/month`;
 }
+
+export function buildOnboardingPresentation(input = {}) {
+  const readiness = deriveProviderReadiness(input);
+  return {
+    currentStep: nextOnboardingStep({ completedSteps: input.onboarding?.completed_steps || [] }),
+    readiness,
+    plans: (input.plans || []).map(plan => ({ ...plan, priceLabel: formatPlanPrice(plan) })),
+  };
+}

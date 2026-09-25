@@ -93,6 +93,15 @@ begin
 
   if not exists (
     select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'subscription_plans'
+      and policyname = 'subscription_plans_authenticated_read'
+      and roles = array['authenticated']::name[]
+  ) then
+    raise exception 'authenticated active-plan catalogue policy is missing';
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
     where schemaname = 'storage' and tablename = 'objects'
       and policyname = 'provider_verification_owner_insert'
       and with_check ilike '%auth.uid()%'
