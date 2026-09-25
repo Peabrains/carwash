@@ -142,6 +142,7 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .cal-block{position:absolute;left:3px;right:3px;border:1px solid #C9DDE2;border-radius:6px;padding:3px 6px;font-size:10.5px;overflow:hidden;background:#EAF3F6;cursor:pointer;line-height:1.3;box-shadow:0 1px 2px rgba(14,36,48,.06);}
 .cal-block .t1{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .cal-block .t2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink-soft);}
+.cal-block .t3{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink-soft);font-size:9.5px;}
 .cal-block.progress{background:#FFF6E8;border-color:#E8C889;}
 .cal-block.done{background:var(--success-soft);border-color:#A8D1B6;}
 .cal-block.attention{background:#FFD9D5;border:2px solid var(--danger);box-shadow:0 0 0 2px rgba(166,27,27,.12);color:#5E1715;}

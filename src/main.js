@@ -1,6 +1,7 @@
 import './style.css';
 import * as api from './lib/api.js';
 import { createBooking, loadCatalogue, loadSlots, manageBooking, searchAvailability } from './lib/public-booking.js';
+import { vehicleLabel } from './lib/appointment-display.js';
 
 // The generated registerSW.js only calls navigator.serviceWorker.register()
 // with no update-detection at all, so a new deploy's service worker sits
@@ -322,7 +323,7 @@ function showApptModal(a, onChanged = () => {}) {
     ['Customer', a.customer_name || '—'],
     ['Phone', a.customer_phone || '— (not collected)'],
     [idLabel, a.customer_chat_id],
-    ['Vehicle', a.vehicle_plate || '—'],
+    ['Vehicle', vehicleLabel(a)],
     ['Service', a.services?.name ?? 'Wash'],
     ['Bay', a.bays?.name ?? '—'],
     ['Time', fmtTime(new Date(a.scheduled_at))],
@@ -455,6 +456,7 @@ async function pageStaffBoard(dateISO) {
       return `<div class="cal-block ${cls}" style="top:${top}px;height:${height}px" data-appt="${a.id}">
         <div class="t1">${fmtTime(start)} ${a.services?.name ?? 'Wash'}</div>
         <div class="t2">${a.customer_name || a.customer_chat_id}</div>
+        <div class="t3">${vehicleLabel(a)}</div>
       </div>`;
     }).join('');
     const breakBlocks = (breaksByBay[b.id] || []).map(br => {
