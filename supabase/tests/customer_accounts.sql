@@ -22,13 +22,17 @@ begin
   ) then
     raise exception 'customer-owned policy is missing auth.uid ownership check';
   end if;
+  if (select count(*) from pg_policies where schemaname = 'public' and tablename = 'appointments' and cmd = 'SELECT') <> 1 then
+    raise exception 'appointment access must use one consolidated SELECT policy';
+  end if;
   if not exists (
     select 1 from pg_policies
     where schemaname = 'public' and tablename = 'appointments'
-      and policyname = 'customers_read_own_appointments'
+      and cmd = 'SELECT'
+      and qual like '%current_staff_context%'
       and qual like '%auth.uid()%customer_user_id%'
   ) then
-    raise exception 'customer appointment history policy is missing';
+    raise exception 'consolidated appointment policy must preserve staff and customer access';
   end if;
   if not exists (
     select 1 from pg_indexes
