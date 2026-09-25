@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+const viteEnv = import.meta.env || {};
+const url = viteEnv.VITE_SUPABASE_URL;
+const key = viteEnv.VITE_SUPABASE_PUBLISHABLE_KEY || viteEnv.VITE_SUPABASE_ANON_KEY;
 
 export const supabaseConfigured = Boolean(url && key);
 export const supabase = supabaseConfigured
@@ -13,6 +14,22 @@ function redirectUrl() {
   // route. The callback handler below restores the session, then the app's
   // router sends the signed-in user to the board.
   return `${window.location.origin}${window.location.pathname}`;
+}
+
+export function buildProviderOwnerSignup({ email, password }) {
+  const baseUrl = redirectUrl();
+  return {
+    email: String(email || '').trim().toLowerCase(),
+    password,
+    options: { emailRedirectTo: `${baseUrl}#/provider/onboarding` },
+  };
+}
+
+export async function signUpProviderOwner({ email, password }) {
+  if (!supabase) throw new Error('Supabase Authentication is not configured.');
+  const { data, error } = await supabase.auth.signUp(buildProviderOwnerSignup({ email, password }));
+  if (error) throw error;
+  return data;
 }
 
 export async function signInStaffWithGoogle() {

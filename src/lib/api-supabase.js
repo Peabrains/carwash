@@ -1,4 +1,4 @@
-import { supabase, supabaseConfigured, finishSupabaseRedirect, getSupabaseUser, signInStaffWithGoogle as supabaseGoogleSignIn, linkStaffGoogleIdentity as supabaseLinkGoogleIdentity, signInStaffWithPassword as supabasePasswordSignIn, signUpStaffWithPassword as supabasePasswordSignUp, sendStaffPasswordReset as supabasePasswordReset, updateStaffPassword as supabasePasswordUpdate, signOutSupabase, watchSupabaseUser, watchOperationalChanges as watchSupabaseOperationalChanges } from './supabase.js';
+import { supabase, supabaseConfigured, finishSupabaseRedirect, getSupabaseUser, signInStaffWithGoogle as supabaseGoogleSignIn, linkStaffGoogleIdentity as supabaseLinkGoogleIdentity, signInStaffWithPassword as supabasePasswordSignIn, signUpStaffWithPassword as supabasePasswordSignUp, signUpProviderOwner as supabaseProviderOwnerSignUp, sendStaffPasswordReset as supabasePasswordReset, updateStaffPassword as supabasePasswordUpdate, signOutSupabase, watchSupabaseUser, watchOperationalChanges as watchSupabaseOperationalChanges } from './supabase.js';
 
 export const DEFAULT_PROVIDER_ID = 'washpoint';
 export const DEFAULT_LOCATION_ID = 'washpoint-main';
@@ -20,6 +20,85 @@ function isBookable(dateISO, settings) { const today = localDate(); const start 
 function readMockBilling() { try { return JSON.parse(localStorage.getItem(MOCK_BILLING_STORAGE_KEY)) || { subscriptions: {}, events: [] }; } catch { return { subscriptions: {}, events: [] }; } }
 function writeMockBilling(value) { localStorage.setItem(MOCK_BILLING_STORAGE_KEY, JSON.stringify(value)); return value; }
 async function rows(table, columns = '*') { const db = ensureSupabase(); const { data, error } = await db.from(table).select(columns).eq('provider_id', activeTenant.providerId).eq('location_id', activeTenant.locationId); errorOrThrow(error, `loading ${table}`); return data || []; }
+
+const ONBOARDING_STEP_FIELDS = Object.freeze({
+  business: ['legal_name', 'business_phone'],
+  outlet: ['name', 'address', 'timezone'],
+  hours: ['weekday_open', 'weekday_close', 'weekend_open', 'weekend_close'],
+  bays: [],
+  services: [],
+  plan: ['plan_id'],
+  review: [],
+});
+
+export function buildProviderOnboardingStepPayload(step, values = {}) {
+  const fields = ONBOARDING_STEP_FIELDS[step];
+  if (!fields) throw new Error(`Unknown onboarding step: ${step}`);
+  return Object.fromEntries(fields.filter(field => values[field] !== undefined).map(field => [field, values[field]]));
+}
+
+export function buildProviderWorkspacePayload({ tradingName, legalName, ssmNumber, businessPhone }) {
+  return {
+    p_trading_name: String(tradingName || '').trim(),
+    p_legal_name: String(legalName || '').trim(),
+    p_ssm_number: String(ssmNumber || '').trim(),
+    p_business_phone: String(businessPhone || '').trim(),
+  };
+}
+
+export async function createProviderWorkspace({ tradingName, legalName, ssmNumber, businessPhone }) {
+  const user = await getSupabaseUser();
+  if (!user) throw new Error('Sign in before creating a provider.');
+  if (!user.email_confirmed_at) throw new Error('Verify your email before creating a provider.');
+  const db = ensureSupabase();
+  const { data, error } = await db.rpc('create_provider_workspace', buildProviderWorkspacePayload({ tradingName, legalName, ssmNumber, businessPhone }));
+  errorOrThrow(error, 'creating provider workspace');
+  const workspace = Array.isArray(data) ? data[0] : data;
+  if (workspace?.provider_id && workspace?.location_id) setActiveTenant(workspace.provider_id, workspace.location_id);
+  return workspace;
+}
+
+export async function getProviderOnboarding() {
+  const db = ensureSupabase();
+  const { data, error } = await db.rpc('get_provider_onboarding');
+  errorOrThrow(error, 'loading provider onboarding');
+  if (data?.provider?.id && data?.outlet?.id) setActiveTenant(data.provider.id, data.outlet.id);
+  return data;
+}
+
+export async function saveProviderOnboardingStep(step, values = {}) {
+  const db = ensureSupabase();
+  const state = await getProviderOnboarding();
+  if (!state?.provider?.id || !state?.outlet?.id) throw new Error('Create your provider workspace first.');
+  const payload = buildProviderOnboardingStepPayload(step, values);
+  let result = null;
+  if (step === 'business' && Object.keys(payload).length) {
+    const response = await db.from('provider_profiles').update({ ...payload, updated_at: new Date().toISOString() }).eq('provider_id', state.provider.id).select().single();
+    errorOrThrow(response.error, 'saving business details'); result = response.data;
+  } else if (step === 'outlet' && Object.keys(payload).length) {
+    const response = await db.from('locations').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', state.outlet.id).select().single();
+    errorOrThrow(response.error, 'saving outlet details'); result = response.data;
+  } else if (step === 'hours' && Object.keys(payload).length) {
+    const response = await db.from('booking_settings').update({ ...payload, updated_at: new Date().toISOString() }).eq('provider_id', state.provider.id).eq('location_id', state.outlet.id).select().single();
+    errorOrThrow(response.error, 'saving operating hours'); result = response.data;
+  } else if (step === 'plan' && payload.plan_id) {
+    const response = await db.rpc('select_provider_pilot_plan', { p_plan_id: payload.plan_id });
+    errorOrThrow(response.error, 'saving provider plan'); result = response.data;
+  }
+  const completed = [...new Set([...(state.onboarding?.completed_steps || []), step])];
+  const { error } = await db.rpc('save_provider_onboarding_progress', { p_step: step, p_completed_steps: completed });
+  errorOrThrow(error, 'saving onboarding progress');
+  return result;
+}
+
+export async function completeProviderOnboarding() {
+  const db = ensureSupabase();
+  const state = await getProviderOnboarding();
+  if (!state?.provider?.id) throw new Error('Create your provider workspace first.');
+  const { data, error } = await db.rpc('complete_provider_onboarding');
+  errorOrThrow(error, 'completing provider onboarding');
+  return data;
+}
 
 export const isSupabaseMode = true;
 export function getActiveTenant() { return { ...activeTenant }; }
@@ -192,6 +271,7 @@ export async function signInStaff() { return supabaseGoogleSignIn(); }
 export async function linkStaffGoogleIdentity() { return supabaseLinkGoogleIdentity(); }
 export async function signInStaffWithPassword(email, password) { return supabasePasswordSignIn(email, password); }
 export async function signUpStaffWithPassword(email, password) { return supabasePasswordSignUp(email, password); }
+export async function signUpProviderOwner({ email, password }) { return supabaseProviderOwnerSignUp({ email, password }); }
 export async function sendStaffPasswordReset(email) { return supabasePasswordReset(email); }
 export async function updateStaffPassword(password) { return supabasePasswordUpdate(password); }
 export async function getAuthUser() { return getSupabaseUser(); }

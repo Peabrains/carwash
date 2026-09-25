@@ -21,6 +21,12 @@ begin
   if to_regprocedure('public.get_provider_onboarding()') is null then
     raise exception 'get_provider_onboarding RPC is missing';
   end if;
+  if to_regprocedure('public.save_provider_onboarding_progress(text,text[])') is null
+    or to_regprocedure('public.select_provider_pilot_plan(text)') is null
+    or to_regprocedure('public.complete_provider_onboarding()') is null
+  then
+    raise exception 'provider onboarding mutation RPCs are missing';
+  end if;
   if not exists (
     select 1 from pg_indexes
     where schemaname = 'public' and tablename = 'provider_profiles'
