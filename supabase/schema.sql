@@ -58,6 +58,7 @@ create table appointments (
   customer_name text,
   customer_phone text,
   channel text not null default 'telegram' check (channel in ('telegram','whatsapp')),
+  booking_source text check (booking_source is null or booking_source in ('walk_in','phone','whatsapp','other')),
   vehicle_plate text,
   vehicle_make_model text,
   bay_id uuid not null references bays(id),

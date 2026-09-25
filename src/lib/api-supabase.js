@@ -253,6 +253,31 @@ export async function getAvailableSlots(dateISO, serviceId, excludeAppointmentId
   return slots;
 }
 
+export async function createStaffBooking(details) {
+  const token = await getSupabaseAccessToken();
+  if (!token) throw new Error('Please sign in before creating a booking.');
+  const response = await fetch('/api/appointments', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      requestId: details.requestId || crypto.randomUUID(),
+      providerId: activeTenant.providerId,
+      locationId: activeTenant.locationId,
+      customerName: String(details.customerName || '').trim(),
+      customerPhone: String(details.customerPhone || '').trim(),
+      vehiclePlate: String(details.vehiclePlate || '').trim().toUpperCase(),
+      vehicleMakeModel: String(details.vehicleMakeModel || '').trim(),
+      serviceId: details.serviceId,
+      dateIso: details.dateISO,
+      time24h: details.time,
+      source: details.source,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Could not create the booking.');
+  return payload;
+}
+
 export async function resolveAppointmentAttention(id, { description = '', archive = true } = {}) { const db = ensureSupabase(); const { data: current, error: currentError } = await db.from('appointments').select('*').eq('id', id).single(); errorOrThrow(currentError, 'loading appointment for resolution'); const patch = { needs_attention: false, updated_at: new Date().toISOString(), ...(archive ? { archived_at: new Date().toISOString() } : {}) }; const { data, error } = await db.from('appointments').update(patch).eq('id', id).select().single(); errorOrThrow(error, 'resolving appointment attention'); await recordBookingEvent(current, 'resolved', description || 'Attention item resolved by staff', { needs_attention: true }, { needs_attention: false }); if (archive) await recordBookingEvent(data, 'archived', 'Resolved booking removed from the active calendar', { archived_at: null }, { archived_at: data.archived_at }); return data; }
 export async function rescheduleAppointment(id, { dateISO, time, bayId } = {}) { const db = ensureSupabase(); const { data: current, error: currentError } = await db.from('appointments').select('*').eq('id', id).single(); errorOrThrow(currentError, 'loading appointment for rescheduling'); const { data: moved, error } = await db.rpc('reschedule_appointment_atomic', { p_appointment_id: id, p_scheduled_date: dateISO, p_time: time, p_bay_id: bayId || null }); errorOrThrow(error, 'rescheduling appointment'); const result = Array.isArray(moved) ? moved[0] : moved; if (!result) throw new Error('The booking could not be moved.'); const scheduledAt = result.result_scheduled_at; const { data, error: reloadError } = await db.from('appointments').select('*').eq('id', id).single(); errorOrThrow(reloadError, 'loading moved appointment'); await recordBookingEvent(data, 'rescheduled', `Booking moved to ${dateISO} at ${time}`, { scheduled_date: current.scheduled_date, scheduled_at: current.scheduled_at, bay_id: current.bay_id }, { scheduled_date: dateISO, scheduled_at: scheduledAt, bay_id: result.result_bay_id }); return data; }
 export async function updateAppointmentStatus(id, status, description = '') { const db = ensureSupabase(); const { data: current, error: currentError } = await db.from('appointments').select('*').eq('id', id).single(); errorOrThrow(currentError, 'loading appointment for status update'); const { data, error } = await db.from('appointments').update({ status, updated_at: new Date().toISOString() }).eq('id', id).select().single(); errorOrThrow(error, 'updating appointment status'); await recordBookingEvent(data, 'status_changed', description || `Status changed to ${status}`, { status: current.status }, { status }); return data; }

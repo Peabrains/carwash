@@ -597,6 +597,7 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .readiness-card{padding:16px;border:1px solid #D2DDD5;border-radius:12px;background:#F4F6F0;}.readiness-card.ready{background:#EEF7F1;border-color:#B9D8C7;}.readiness-card p{margin:6px 0 0;color:#61736F;}
 .onboarding-actions{display:flex;justify-content:space-between;gap:12px;margin-top:16px;}
 .onboarding-actions .btn{width:auto;min-width:150px;margin:0;}
+.calendar-toolbar-actions{display:flex;gap:8px;}.manual-booking-form{display:grid;gap:12px;}
 .provider-readiness-banner{display:grid;grid-template-columns:repeat(3,1fr) auto;align-items:center;gap:12px;margin-bottom:18px;padding:14px 16px;border:1px solid #B9D8C7;border-radius:13px;background:#EEF7F1;}
 .provider-readiness-banner div{display:grid;gap:3px;}.provider-readiness-banner span{color:#61736F;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}.provider-readiness-banner strong{font-size:12px;}.provider-readiness-banner .btn{margin:0;}
 
@@ -626,6 +627,7 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
   .provider-auth-screen{grid-template-columns:1fr;padding-top:28px;gap:20px;}.provider-auth-copy h1{font-size:40px;}.provider-register-card{padding:18px;}
   .onboarding-screen{padding-top:22px;padding-bottom:110px;}.onboarding-head{align-items:start;}.onboarding-head h1{font-size:36px;}.onboarding-progress{display:flex;overflow-x:auto;padding-bottom:8px;}.onboarding-progress a{min-width:58px;}.onboarding-fields,.onboarding-plans{grid-template-columns:1fr;}.onboarding-fields .field-wide{grid-column:auto;}.onboarding-plan span{min-height:0;}.onboarding-actions{position:fixed;z-index:20;left:0;right:0;bottom:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:rgba(252,252,248,.96);border-top:1px solid #D2DDD5;}.onboarding-actions .btn{flex:1;min-width:0;}
   .provider-readiness-banner{grid-template-columns:1fr 1fr;}.provider-readiness-banner .btn{grid-column:1/-1;width:100%;}
+  .calendar-toolbar{align-items:flex-start;}.calendar-toolbar-actions{flex-direction:column;}.calendar-toolbar-actions button{width:100%;}
   .customer-account-screen{padding-top:26px;}.account-auth-grid,.account-grid{grid-template-columns:1fr;}.account-booking{grid-template-columns:1fr 1fr;}.account-booking>strong{grid-column:1/-1;}.account-section-head{display:block;}.customer-topbar-actions{gap:8px;}.customer-topbar-actions .topbar-link{font-size:10px;}
   .screen{padding-left:16px;padding-right:16px;}
   .topbar{grid-template-columns:auto minmax(0,1fr) auto;padding:11px 12px;gap:8px;}

@@ -366,6 +366,19 @@ async function showRescheduleModal(a, dateISO, onDone) {
   } catch (error) { overlay.querySelector('.modal-card').innerHTML = `<h3>Could not load times</h3><p class="lead" style="color:#b3261e">${h(error?.message || 'Unknown error')}</p><button class="btn" id="closeMove" type="button">Close</button>`; overlay.querySelector('#closeMove').onclick = () => overlay.remove(); }
 }
 
+async function showManualBookingModal(dateISO, onDone) {
+  const overlay = document.createElement('div'); overlay.className = 'modal-overlay';
+  overlay.innerHTML = '<div class="modal-card"><h3>New manual booking</h3><p class="lead">Loading services…</p></div>'; document.body.appendChild(overlay);
+  try {
+    const services = await api.getServices(); const card = overlay.querySelector('.modal-card');
+    card.innerHTML = `<h3>New manual booking</h3><p class="lead">Add a walk-in, phone or message request. Docket assigns an available bay.</p><form id="manualBookingForm" class="manual-booking-form"><div class="onboarding-fields"><div class="field"><label for="manualSource">Source</label><select id="manualSource"><option value="walk_in">Walk-in</option><option value="phone">Phone</option><option value="whatsapp">WhatsApp</option><option value="other">Other</option></select></div><div class="field"><label for="manualService">Service</label><select id="manualService" required>${services.map(item => `<option value="${h(item.id)}">${h(item.name)} · ${item.duration_minutes} min</option>`).join('')}</select></div><div class="field"><label for="manualDate">Date</label><input id="manualDate" type="date" value="${h(dateISO)}" required></div><div class="field"><label for="manualTime">Available time</label><select id="manualTime" required><option value="">Loading…</option></select></div><div class="field"><label for="manualCustomer">Customer name</label><input id="manualCustomer" required></div><div class="field"><label for="manualPhone">Phone</label><input id="manualPhone" required autocomplete="tel"></div><div class="field"><label for="manualPlate">Plate number</label><input id="manualPlate" required></div><div class="field"><label for="manualVehicle">Make and model</label><input id="manualVehicle" required></div></div><p id="manualBookingMessage" class="lead" role="status"></p><div class="confirmation-actions"><button class="btn secondary" id="cancelManualBooking" type="button">Cancel</button><button class="btn" type="submit">Create booking</button></div></form>`;
+    const loadTimes = async () => { const select = card.querySelector('#manualTime'); select.innerHTML = '<option value="">Loading…</option>'; try { const slots = (await api.getAvailableSlots(card.querySelector('#manualDate').value, card.querySelector('#manualService').value)).filter(item => item.available); select.innerHTML = slots.length ? slots.map(item => `<option value="${h(item.time)}">${h(item.time)}</option>`).join('') : '<option value="">No available times</option>'; } catch (error) { select.innerHTML = `<option value="">${h(error?.message || 'Could not load times')}</option>`; } };
+    card.querySelector('#manualDate').onchange = loadTimes; card.querySelector('#manualService').onchange = loadTimes; card.querySelector('#cancelManualBooking').onclick = () => overlay.remove();
+    card.querySelector('#manualBookingForm').onsubmit = async event => { event.preventDefault(); const button = event.currentTarget.querySelector('[type="submit"]'); const message = card.querySelector('#manualBookingMessage'); button.disabled = true; message.textContent = 'Creating booking…'; try { const result = await api.createStaffBooking({ source: card.querySelector('#manualSource').value, serviceId: card.querySelector('#manualService').value, dateISO: card.querySelector('#manualDate').value, time: card.querySelector('#manualTime').value, customerName: card.querySelector('#manualCustomer').value, customerPhone: card.querySelector('#manualPhone').value, vehiclePlate: card.querySelector('#manualPlate').value, vehicleMakeModel: card.querySelector('#manualVehicle').value }); overlay.remove(); alert(`Booking ${result.reference} created.`); onDone(); } catch (error) { message.textContent = error?.message || 'Could not create booking.'; button.disabled = false; } };
+    await loadTimes();
+  } catch (error) { overlay.querySelector('.modal-card').innerHTML = `<h3>Could not open manual booking</h3><p class="lead">${h(error?.message || 'Please try again.')}</p><button class="btn" id="closeManualBooking">Close</button>`; overlay.querySelector('#closeManualBooking').onclick = () => overlay.remove(); }
+}
+
 async function pageStaffBoard(dateISO) {
   boardRealtimeCleanup?.();
   boardRealtimeCleanup = null;
@@ -509,7 +522,7 @@ async function pageStaffBoard(dateISO) {
     </section>
     <div class="board-workspace">
       <main class="board-calendar-panel">
-        <div class="calendar-toolbar"><div><strong>Bay schedule</strong><span>${bays.length} active bay${bays.length === 1 ? '' : 's'}${isToday ? ' · live availability' : ''}</span></div>${staff.role === 'owner' ? '<button class="calendar-outage-btn" id="reportBayOutage" type="button">Report outage</button>' : ''}</div>
+        <div class="calendar-toolbar"><div><strong>Bay schedule</strong><span>${bays.length} active bay${bays.length === 1 ? '' : 's'}${isToday ? ' · live availability' : ''}</span></div><div class="calendar-toolbar-actions">${['owner','manager','platform_owner'].includes(staff.role) ? '<button class="calendar-outage-btn" id="newManualBooking" type="button">New booking</button>' : ''}${staff.role === 'owner' ? '<button class="calendar-outage-btn" id="reportBayOutage" type="button">Report outage</button>' : ''}</div></div>
         <div class="cal-wrap">
           <div class="cal-grid" style="grid-template-columns:44px repeat(${bays.length},minmax(140px,1fr))">
             <div class="cal-gutter-head"></div>
@@ -527,6 +540,7 @@ async function pageStaffBoard(dateISO) {
   `);
   document.querySelectorAll('[data-date]').forEach(el => el.onclick = () => pageStaffBoard(el.dataset.date));
   document.querySelector('[data-refresh-board]')?.addEventListener('click', () => pageStaffBoard(date));
+  document.getElementById('newManualBooking')?.addEventListener('click', () => showManualBookingModal(date, () => pageStaffBoard(date)));
   document.querySelectorAll('[data-appt]').forEach(el => el.onclick = () => {
     const a = appts.find(x => x.id === el.dataset.appt);
     if (a) showApptModal(a, () => pageStaffBoard(date));

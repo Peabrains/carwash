@@ -42,6 +42,12 @@ begin
     raise exception 'appointments.is_test is missing';
   end if;
   if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'appointments' and column_name = 'booking_source'
+  ) then
+    raise exception 'appointments.booking_source is missing';
+  end if;
+  if not exists (
     select 1 from pg_indexes
     where schemaname = 'public' and tablename = 'provider_profiles'
       and indexdef ilike '%unique%ssm_number%'
