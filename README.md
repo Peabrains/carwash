@@ -36,6 +36,44 @@ Portal routes:
 - `#/staff/board`
 - `#/staff/settings`
 - `#/staff/organization`
+- `#/staff/verification` (provider owner marketplace submission)
+- `#/staff/platform-admin` (platform review and administration)
+
+## Provider registration and operation
+
+Providers register from `#/provider/register` with email and password, verify their email, and resume the seven-step setup wizard at any time. Completing the operational checklist creates a private workspace with one outlet, booking rules, bays, services, and a selected plan. Platform-owner intervention is not required.
+
+Operational readiness and marketplace visibility are separate:
+
+- Ready providers can use their dashboard, record walk-in/phone/WhatsApp bookings, and share `#/book/{providerId}` privately.
+- Only approved providers appear in the public web marketplace and Telegram provider picker.
+- Changing or rejecting a marketplace application does not disable the provider's private operations.
+
+## Marketplace review checklist
+
+Provider owners open **More → Marketplace verification**, then upload a current SSM document and storefront photo. Files must be PDF, JPEG, or PNG and no larger than 10 MB. Submissions capture an immutable version of the provider profile and operational setup.
+
+Platform owners open **More → Providers & subscriptions** and review:
+
+1. The legal name and SSM number match the submitted registration document.
+2. The storefront photo plausibly matches the trading name and configured outlet.
+3. Contact details, outlet, operating hours, active bays, and active services are complete.
+4. The submitted version is current; changed details require a fresh submission.
+
+Approve only when those checks pass. Request changes or reject with a clear reason. Secure document links expire after five minutes.
+
+There are two suspension levels:
+
+- **Marketplace-only suspension:** removes the provider from web and Telegram discovery, while private links and manual bookings continue.
+- **Full operational suspension:** also rejects private and manual bookings. Use this only for safety, fraud, legal, or serious operational incidents.
+
+Verification decisions never change the provider's subscription.
+
+## Pilot plans and future payments
+
+Plans are free during the pilot, but their outlet, staff, and monthly-booking limits are enforced now. Upgrade, downgrade, renewal, and cancellation state is stored independently from marketplace verification.
+
+Real payment collection remains a later integration boundary. A payment provider should update the existing subscription and plan-change records through trusted server-side webhooks; browser clients must never mark invoices paid or activate plans directly.
 
 ## Local development
 
@@ -88,11 +126,12 @@ Customer cancellation and rescheduling also use atomic Supabase functions. A cus
 
 Telegram confirmations, reschedule/cancellation messages, and 24-hour/2-hour reminders are stored in `booking_notifications` before delivery. The sender claims rows atomically, retries temporary failures, and stops after four attempts. `/api/health` reports missing reminder configuration and an excessive failed-message count without exposing customer data.
 
-## Production checklist and known blockers
+## Production checklist and known limitations
 
 - `BOOKING_NOTIFICATION_CRON_SECRET` is configured in Vercel Production. Add the same value as the GitHub Actions repository secret before enabling the reminder schedule; this remains pending until GitHub CLI authentication is restored.
 - Supabase leaked-password protection must be enabled in the Account B Auth password settings when the project plan exposes that control. Until then, the related advisor warning is acknowledged as a plan limitation.
-- Production catalogue checks and live booking lifecycle tests are intentionally deferred. Use only a dedicated test appointment when those checks are approved; never modify a real customer booking.
+- Use a dedicated, clearly labelled test provider and test appointments for full signup/booking smoke tests. Never modify a real customer booking. Keep the test provider unapproved except during a controlled marketplace visibility check.
+- Supabase's SECURITY DEFINER advisor warns about authenticated RPCs by design. Each exposed RPC derives the actor from `auth.uid()`, validates provider and role boundaries internally, and has regression coverage. Treat any newly exposed function without those guards as a release blocker.
 
 ## Legacy archive
 

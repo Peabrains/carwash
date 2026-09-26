@@ -12,17 +12,18 @@ Allow a car-wash provider to register, configure one outlet, select a free pilot
 - Only marketplace-approved providers appear in public discovery and Telegram provider selection.
 - Initial onboarding creates exactly one outlet. Additional outlets are managed later and constrained by the selected plan.
 - All plans cost RM0 during the pilot, while plan limits and lifecycle behavior remain real.
-- Payments, identity documents, and bank verification are deferred.
+- Payments, personal identity documents, and bank verification are deferred. Business SSM evidence and a storefront photo are collected only for marketplace review.
 
-## Current State
+## Implemented State (September 2026)
 
 - Supabase provides production authentication, database, row-level security, and storage.
 - The staff application already supports provider profiles, locations, operating hours, booking rules, bays, services, staff invitations, plans, and platform administration.
-- Platform operators can create providers, but providers cannot yet create their own workspace.
-- Existing subscription tables store plans and one subscription per provider, but provider owners can only read subscription data.
-- Existing onboarding records are platform-owner-only and do not represent a resumable self-service wizard.
-- Public web and Telegram booking use the shared provider catalogue.
-- Staff can manage existing appointments, but there is no dedicated manual-booking form for walk-ins or phone/WhatsApp requests.
+- Providers can register, verify email, create their own workspace, and resume the setup wizard without platform intervention.
+- Provider owners can select and change free-pilot plans; outlet, staff, invitation, and booking limits are enforced in the database.
+- Staff can create walk-in, phone, WhatsApp, and other manual bookings through the same atomic availability rules used by customer channels.
+- Public web and Telegram discovery share the approved-provider filter. Operational unapproved providers remain available through private provider links.
+- Provider owners can submit private SSM/storefront evidence. Platform owners can approve, request changes, reject, apply marketplace-only suspension, or suspend all operations.
+- Submission snapshots are immutable, stale versions cannot be approved, and verification decisions do not alter subscriptions.
 
 ## Account and Workspace Creation
 
@@ -138,7 +139,7 @@ Every operationally ready provider receives an unlisted provider-specific bookin
 
 The link exposes only that provider and its active locations/services. It does not imply Docket marketplace verification. The page displays a neutral notice that the provider is not yet marketplace verified.
 
-A platform suspension disables both private booking and marketplace discovery. A pending, rejected, or unsubmitted marketplace review does not disable private booking.
+A marketplace-only suspension removes public discovery but leaves private booking operational. A full operational suspension disables both private booking and marketplace discovery. A pending, rejected, or unsubmitted marketplace review does not disable private booking.
 
 ## Marketplace Verification
 
