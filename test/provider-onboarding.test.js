@@ -137,3 +137,28 @@ test('onboarding presentation resumes at the first missing step and labels pilot
   assert.equal(model.readiness.marketplaceReady, false);
   assert.deepEqual(model.plans, [{ id: 'starter', monthly_price_myr: 0, pilot_free: true, priceLabel: 'Free during pilot' }]);
 });
+
+test('verification uploads accept only the two required kinds and safe 10 MB files', async () => {
+  installBrowserStubs();
+  const { validateProviderVerificationFile } = await import('../src/lib/api-supabase.js');
+  assert.deepEqual(validateProviderVerificationFile('ssm', { name: 'ssm.pdf', type: 'application/pdf', size: 1024 }), {
+    kind: 'ssm', name: 'ssm.pdf', contentType: 'application/pdf', size: 1024,
+  });
+  assert.deepEqual(validateProviderVerificationFile('storefront', { name: 'shop.png', type: 'image/png', size: 10 * 1024 * 1024 }), {
+    kind: 'storefront', name: 'shop.png', contentType: 'image/png', size: 10 * 1024 * 1024,
+  });
+  assert.throws(() => validateProviderVerificationFile('other', { name: 'x.pdf', type: 'application/pdf', size: 1 }), /document kind/i);
+  assert.throws(() => validateProviderVerificationFile('ssm', { name: 'x.exe', type: 'application/octet-stream', size: 1 }), /PDF, JPEG or PNG/i);
+  assert.throws(() => validateProviderVerificationFile('ssm', { name: 'x.pdf', type: 'application/pdf', size: 10 * 1024 * 1024 + 1 }), /10 MB/i);
+});
+
+test('verification decisions require reasons for every non-approval outcome', async () => {
+  installBrowserStubs();
+  const { buildProviderVerificationDecision } = await import('../src/lib/api-supabase.js');
+  assert.deepEqual(buildProviderVerificationDecision({ verificationId: 'v1', decision: 'approved', reason: '', suspendOperations: false, expectedVersion: 3 }), {
+    p_verification_id: 'v1', p_decision: 'approved', p_reason: '', p_suspend_operations: false, p_expected_version: 3,
+  });
+  assert.throws(() => buildProviderVerificationDecision({ verificationId: 'v1', decision: 'changes_requested', reason: ' ' }), /reason/i);
+  assert.throws(() => buildProviderVerificationDecision({ verificationId: 'v1', decision: 'rejected', reason: '' }), /reason/i);
+  assert.throws(() => buildProviderVerificationDecision({ verificationId: 'v1', decision: 'suspended', reason: '' }), /reason/i);
+});

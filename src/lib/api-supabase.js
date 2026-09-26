@@ -46,6 +46,68 @@ export function buildProviderWorkspacePayload({ tradingName, legalName, ssmNumbe
   };
 }
 
+const VERIFICATION_FILE_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+const VERIFICATION_FILE_LIMIT = 10 * 1024 * 1024;
+
+export function validateProviderVerificationFile(kind, file) {
+  if (!['ssm', 'storefront'].includes(kind)) throw new Error('Unknown verification document kind.');
+  if (!file || !VERIFICATION_FILE_TYPES.has(file.type)) throw new Error('Upload a PDF, JPEG or PNG file.');
+  if (!Number(file.size) || Number(file.size) > VERIFICATION_FILE_LIMIT) throw new Error('Each verification file must be 10 MB or smaller.');
+  return { kind, name: String(file.name || 'document'), contentType: file.type, size: Number(file.size) };
+}
+
+export function buildProviderVerificationDecision({ verificationId, decision, reason = '', suspendOperations = false, expectedVersion }) {
+  if (!['approved', 'changes_requested', 'rejected', 'suspended'].includes(decision)) throw new Error('Choose a valid verification decision.');
+  const cleanReason = String(reason || '').trim();
+  if (decision !== 'approved' && !cleanReason) throw new Error('Enter a reason for this decision.');
+  return { p_verification_id: verificationId, p_decision: decision, p_reason: cleanReason, p_suspend_operations: Boolean(suspendOperations), p_expected_version: Number(expectedVersion) };
+}
+
+export async function uploadProviderVerificationFile(kind, file) {
+  const checked = validateProviderVerificationFile(kind, file);
+  const db = ensureSupabase();
+  const { data: path, error: pathError } = await db.rpc('prepare_provider_verification_upload', {
+    p_kind: checked.kind, p_filename: checked.name, p_content_type: checked.contentType, p_size_bytes: checked.size,
+  });
+  errorOrThrow(pathError, 'preparing verification upload');
+  const { data: signed, error: signedError } = await db.storage.from('provider-verification').createSignedUploadUrl(path);
+  errorOrThrow(signedError, 'authorizing verification upload');
+  const { error: uploadError } = await db.storage.from('provider-verification').uploadToSignedUrl(path, signed.token, file, { contentType: checked.contentType });
+  errorOrThrow(uploadError, 'uploading verification file');
+  return { kind, path, name: checked.name };
+}
+
+export async function submitProviderVerification({ ssmDocumentPath, storefrontPhotoPath }) {
+  const db = ensureSupabase();
+  const { data, error } = await db.rpc('submit_provider_verification', { p_ssm_document_path: ssmDocumentPath, p_storefront_photo_path: storefrontPhotoPath });
+  errorOrThrow(error, 'submitting provider verification');
+  return data;
+}
+
+export async function getProviderVerification() {
+  const db = ensureSupabase();
+  const { data, error } = await db.from('provider_verifications').select('*').eq('provider_id', activeTenant.providerId).order('submission_version', { ascending: false }).limit(1).maybeSingle();
+  errorOrThrow(error, 'loading provider verification');
+  return data || null;
+}
+
+export async function getProviderVerificationDocumentUrls(verification) {
+  const db = ensureSupabase();
+  const paths = [verification?.ssm_document_path, verification?.storefront_photo_path];
+  if (paths.some(path => !path)) throw new Error('This submission does not include both documents.');
+  const results = await Promise.all(paths.map(path => db.storage.from('provider-verification').createSignedUrl(path, 300)));
+  results.forEach(result => errorOrThrow(result.error, 'opening verification document'));
+  return { ssm: results[0].data.signedUrl, storefront: results[1].data.signedUrl };
+}
+
+export async function decideProviderVerification(input) {
+  const db = ensureSupabase();
+  const payload = buildProviderVerificationDecision(input);
+  const { data, error } = await db.rpc('decide_provider_verification', payload);
+  errorOrThrow(error, 'reviewing provider verification');
+  return data;
+}
+
 export async function createProviderWorkspace({ tradingName, legalName, ssmNumber, businessPhone }) {
   const user = await getSupabaseUser();
   if (!user) throw new Error('Sign in before creating a provider.');
@@ -127,13 +189,15 @@ export async function getAccessibleTenants() {
 
 export async function getPlatformAdminData() {
   const db = ensureSupabase();
-  const [{ data: providers, error: providerError }, { data: locations, error: locationError }, { data: staff, error: staffError }, { data: subscriptions, error: subscriptionError }, { data: onboarding, error: onboardingError }, { data: plans, error: planError }] = await Promise.all([
+  const [{ data: providers, error: providerError }, { data: locations, error: locationError }, { data: staff, error: staffError }, { data: subscriptions, error: subscriptionError }, { data: onboarding, error: onboardingError }, { data: plans, error: planError }, { data: profiles, error: profileError }, { data: verifications, error: verificationError }] = await Promise.all([
     db.from('providers').select('*').order('name'),
     db.from('locations').select('id,provider_id,name,is_active'),
     db.from('staff').select('id,provider_id,role,is_active'),
     db.from('provider_subscriptions').select('provider_id,plan_id,status,trial_ends_at,current_period_end'),
     db.from('provider_onboarding').select('*'),
     db.from('subscription_plans').select('*').order('monthly_price_myr'),
+    db.from('provider_profiles').select('*'),
+    db.from('provider_verifications').select('*').order('submitted_at', { ascending: false }),
   ]);
   errorOrThrow(providerError, 'loading platform providers');
   errorOrThrow(locationError, 'loading platform locations');
@@ -141,10 +205,12 @@ export async function getPlatformAdminData() {
   errorOrThrow(subscriptionError, 'loading provider subscriptions');
   errorOrThrow(onboardingError, 'loading provider onboarding');
   errorOrThrow(planError, 'loading subscription plans');
+  errorOrThrow(profileError, 'loading provider profiles');
+  errorOrThrow(verificationError, 'loading provider verifications');
   const mockBilling = readMockBilling();
   const mockedProviderIds = new Set(Object.keys(mockBilling.subscriptions));
   const mergedSubscriptions = [...(subscriptions || []).filter(item => !mockedProviderIds.has(item.provider_id)), ...Object.values(mockBilling.subscriptions)];
-  return { providers: providers || [], locations: locations || [], staff: staff || [], subscriptions: mergedSubscriptions, onboarding: onboarding || [], plans: plans || [], billingEvents: mockBilling.events || [] };
+  return { providers: providers || [], locations: locations || [], staff: staff || [], subscriptions: mergedSubscriptions, onboarding: onboarding || [], plans: plans || [], profiles: profiles || [], verifications: verifications || [], billingEvents: mockBilling.events || [] };
 }
 
 export async function simulateMockSubscription({ providerId, planId, outcome = 'success' }) {

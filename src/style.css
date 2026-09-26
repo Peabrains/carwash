@@ -752,3 +752,19 @@ select{-webkit-appearance:none;appearance:none;background-image:url("data:image/
 .crew-break-form .compact-number input {
   font-size:13px;
 }
+.verification-status { display:inline-flex; align-items:center; padding:.45rem .75rem; border-radius:999px; background:#eef3ef; color:#25443e; font-size:.78rem; font-weight:800; text-transform:capitalize; }
+.verification-status.status-approved { background:#dff4e6; color:#166534; }
+.verification-status.status-pending_review { background:#fff3cf; color:#7a4b00; }
+.verification-status.status-rejected,.verification-status.status-suspended { background:#fde7e4; color:#a12d24; }
+.verification-panel { display:grid; gap:1.25rem; }
+.verification-requirements ul { margin:.65rem 0 0; padding-left:1.25rem; color:var(--muted); }
+.verification-form { display:grid; gap:1rem; max-width:42rem; }
+.verification-reason { padding:.9rem 1rem; border-radius:14px; background:#f5f2ea; }
+.verification-reason p { margin:.35rem 0 0; color:var(--muted); }
+.platform-verification-list { display:grid; gap:1rem; }
+.verification-review-card { border:1px solid var(--line); border-radius:18px; padding:1rem; display:grid; gap:1rem; }
+.verification-review-actions { display:grid; gap:.75rem; }
+.verification-review-actions textarea { width:100%; min-height:5.5rem; resize:vertical; }
+.verification-review-actions .confirmation-actions { flex-wrap:wrap; }
+.verification-document-links { display:flex; align-items:center; flex-wrap:wrap; gap:.65rem; }
+.verification-document-links small { color:var(--muted); }

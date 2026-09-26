@@ -21,6 +21,12 @@ begin
   if to_regprocedure('public.get_provider_onboarding()') is null then
     raise exception 'get_provider_onboarding RPC is missing';
   end if;
+  if to_regprocedure('public.prepare_provider_verification_upload(text,text,text,bigint)') is null
+    or to_regprocedure('public.submit_provider_verification(text,text)') is null
+    or to_regprocedure('public.decide_provider_verification(uuid,text,text,boolean,integer)') is null
+  then
+    raise exception 'provider verification workflow RPCs are missing';
+  end if;
   if to_regprocedure('public.save_provider_onboarding_progress(text,text[])') is null
     or to_regprocedure('public.select_provider_pilot_plan(text)') is null
     or to_regprocedure('public.complete_provider_onboarding()') is null
@@ -60,9 +66,7 @@ begin
   where schemaname = 'public' and tablename = 'provider_verifications';
 
   if verification_policies is distinct from array[
-    'provider_verifications_owner_insert',
-    'provider_verifications_owner_select',
-    'provider_verifications_platform_update'
+    'provider_verifications_owner_select'
   ]::text[] then
     raise exception 'provider verification policies are incorrect: %', verification_policies;
   end if;
@@ -129,6 +133,96 @@ begin
   ) then
     raise exception 'provider verification uploads are not owner/folder scoped';
   end if;
+end
+$$;
+
+do $$
+declare
+  owner_id uuid;
+  original_role text;
+  verification jsonb;
+  verification_id uuid;
+  captured_version integer;
+  plan_before text;
+begin
+  select id, role into owner_id, original_role from public.staff
+  where provider_id = 'washpoint' and role in ('owner','platform_owner') and is_active
+  order by case role when 'owner' then 0 else 1 end limit 1;
+  if owner_id is null then raise exception 'WashPoint owner is required for verification tests'; end if;
+  update public.staff set role = 'owner' where id = owner_id;
+  perform set_config('request.jwt.claim.sub', owner_id::text, true);
+  perform set_config('request.jwt.claim.role', 'authenticated', true);
+  update public.provider_profiles set legal_name = 'WashPoint Test Sdn Bhd', ssm_number = 'VERIFICATIONTEST001', business_phone = '0123456789', marketplace_status = 'not_submitted', operations_suspended = false where provider_id = 'washpoint';
+  select plan_id into plan_before from public.provider_subscriptions where provider_id = 'washpoint';
+
+  insert into storage.objects(bucket_id, name)
+  select 'provider-verification', path from unnest(array[
+    'washpoint/ssm/sql-test-1.pdf','washpoint/storefront/sql-test-1.png',
+    'washpoint/ssm/sql-test-2.pdf','washpoint/storefront/sql-test-2.png',
+    'washpoint/ssm/sql-test-3.pdf','washpoint/storefront/sql-test-3.png',
+    'washpoint/ssm/sql-test-4.pdf','washpoint/storefront/sql-test-4.png'
+  ]) path;
+
+  begin
+    perform public.submit_provider_verification('washpoint/ssm/sql-test-1.pdf', 'washpoint/storefront/missing.png');
+    raise exception 'incomplete verification submission was accepted';
+  exception when others then
+    if sqlerrm not like 'Upload both verification documents%' then raise; end if;
+  end;
+
+  verification := public.submit_provider_verification('washpoint/ssm/sql-test-1.pdf', 'washpoint/storefront/sql-test-1.png');
+  verification_id := (verification->>'id')::uuid;
+  captured_version := (select (submitted_snapshot->>'profile_version')::integer from public.provider_verifications where id = verification_id);
+  if verification ? 'ssm_document_path' or verification ? 'storefront_photo_path' then raise exception 'submission response exposed raw storage paths'; end if;
+
+  update public.provider_profiles set business_phone = '0199999999' where provider_id = 'washpoint';
+  update public.staff set role = 'platform_owner' where id = owner_id;
+  begin
+    perform public.decide_provider_verification(verification_id, 'approved', '', false, captured_version);
+    raise exception 'stale verification approval was accepted';
+  exception when others then
+    if sqlerrm not like 'Provider details changed after submission%' then raise; end if;
+  end;
+  begin
+    perform public.decide_provider_verification(verification_id, 'changes_requested', '', false, captured_version);
+    raise exception 'review decision without a reason was accepted';
+  exception when others then
+    if sqlerrm not like 'A reason is required%' then raise; end if;
+  end;
+  perform public.decide_provider_verification(verification_id, 'changes_requested', 'Upload the updated registration document.', false, captured_version);
+
+  update public.staff set role = 'owner' where id = owner_id;
+  verification := public.submit_provider_verification('washpoint/ssm/sql-test-2.pdf', 'washpoint/storefront/sql-test-2.png');
+  verification_id := (verification->>'id')::uuid;
+  captured_version := (select (submitted_snapshot->>'profile_version')::integer from public.provider_verifications where id = verification_id);
+  update public.staff set role = 'platform_owner' where id = owner_id;
+  perform public.decide_provider_verification(verification_id, 'approved', '', false, captured_version);
+  if not exists (select 1 from public.provider_profiles where provider_id = 'washpoint' and marketplace_status = 'approved' and reviewed_version = captured_version and not operations_suspended) then
+    raise exception 'approval did not publish the reviewed provider version';
+  end if;
+
+  update public.staff set role = 'owner' where id = owner_id;
+  verification := public.submit_provider_verification('washpoint/ssm/sql-test-3.pdf', 'washpoint/storefront/sql-test-3.png');
+  verification_id := (verification->>'id')::uuid;
+  captured_version := (select (submitted_snapshot->>'profile_version')::integer from public.provider_verifications where id = verification_id);
+  update public.staff set role = 'platform_owner' where id = owner_id;
+  perform public.decide_provider_verification(verification_id, 'suspended', 'Marketplace listing paused for review.', false, captured_version);
+  if not exists (select 1 from public.provider_profiles where provider_id = 'washpoint' and marketplace_status = 'suspended' and not operations_suspended) then
+    raise exception 'marketplace-only suspension incorrectly stopped private operations';
+  end if;
+  if (select plan_id from public.provider_subscriptions where provider_id = 'washpoint') is distinct from plan_before then
+    raise exception 'verification decision altered the provider subscription';
+  end if;
+  update public.staff set role = 'owner' where id = owner_id;
+  verification := public.submit_provider_verification('washpoint/ssm/sql-test-4.pdf', 'washpoint/storefront/sql-test-4.png');
+  verification_id := (verification->>'id')::uuid;
+  captured_version := (select (submitted_snapshot->>'profile_version')::integer from public.provider_verifications where id = verification_id);
+  update public.staff set role = 'platform_owner' where id = owner_id;
+  perform public.decide_provider_verification(verification_id, 'suspended', 'All booking operations paused for investigation.', true, captured_version);
+  if not exists (select 1 from public.provider_profiles where provider_id = 'washpoint' and operations_suspended) then
+    raise exception 'full operational suspension was not preserved';
+  end if;
+  update public.staff set role = original_role where id = owner_id;
 end
 $$;
 
