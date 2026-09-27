@@ -95,8 +95,14 @@ test('provider owner signup normalizes email and uses the onboarding callback', 
   assert.deepEqual(buildProviderOwnerSignup({ email: '  Owner@Example.COM ', password: 'secret123' }), {
     email: 'owner@example.com',
     password: 'secret123',
-    options: { emailRedirectTo: 'https://washcar.my/#/provider/onboarding' },
+    options: { emailRedirectTo: 'https://washcar.my/?provider_onboarding=1' },
   });
+});
+
+test('provider email confirmation returns to provider onboarding', async () => {
+  installBrowserStubs();
+  const { getSupabaseRedirectRoute } = await import('../src/lib/supabase.js');
+  assert.equal(getSupabaseRedirectRoute({ search: '?provider_onboarding=1', authType: 'signup' }), '#/provider/onboarding');
 });
 
 test('onboarding step payloads allow only fields owned by each step', async () => {

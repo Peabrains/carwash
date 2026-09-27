@@ -21,8 +21,16 @@ export function buildProviderOwnerSignup({ email, password }) {
   return {
     email: String(email || '').trim().toLowerCase(),
     password,
-    options: { emailRedirectTo: `${baseUrl}#/provider/onboarding` },
+    options: { emailRedirectTo: `${baseUrl}?provider_onboarding=1` },
   };
+}
+
+export function getSupabaseRedirectRoute({ search = '', authType = '' } = {}) {
+  const query = new URLSearchParams(search);
+  if (query.has('provider_onboarding')) return '#/provider/onboarding';
+  if (query.has('customer_reset')) return '#/account/reset-password';
+  if (authType === 'recovery' || query.has('staff_reset')) return '#/staff/reset-password';
+  return '#/';
 }
 
 export async function signUpProviderOwner({ email, password }) {
@@ -202,9 +210,10 @@ export async function finishSupabaseRedirect() {
   if (accessToken && refreshToken) {
     const { data, error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
     if (error) throw error;
-    const route = url.searchParams.has('customer_reset') ? '#/account/reset-password' : (hashParams.get('type') === 'recovery' || url.searchParams.has('staff_reset') ? '#/staff/reset-password' : '#/');
+    const route = getSupabaseRedirectRoute({ search: url.search, authType: hashParams.get('type') });
     url.searchParams.delete('staff_reset');
     url.searchParams.delete('customer_reset');
+    url.searchParams.delete('provider_onboarding');
     window.history.replaceState({}, document.title, `${url.pathname}${url.search}${route}`);
     return data.user || null;
   }

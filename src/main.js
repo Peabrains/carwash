@@ -1391,7 +1391,7 @@ function router() {
   const hashParams = new URLSearchParams(hash.replace(/^#/, ''));
   const isRecoveryCallback = hashParams.has('access_token') && hashParams.get('type') === 'recovery';
   const query = new URLSearchParams(location.search);
-  const route = query.has('customer_reset') ? '#/account/reset-password' : (isRecoveryCallback || query.has('staff_reset') ? '#/staff/reset-password' : hash.split('?')[0]);
+  const route = query.has('provider_onboarding') ? '#/provider/onboarding' : (query.has('customer_reset') ? '#/account/reset-password' : (isRecoveryCallback || query.has('staff_reset') ? '#/staff/reset-password' : hash.split('?')[0]));
   if (route.startsWith('#/book/')) pageCustomerBook(decodeURIComponent(route.slice('#/book/'.length)));
   else (routes[route] ?? pageStaffBoard)();
 }
