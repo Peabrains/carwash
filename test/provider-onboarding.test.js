@@ -111,6 +111,12 @@ test('manual booking checks the current Supabase session before submitting', asy
   await assert.rejects(() => createStaffBooking({}), /Please sign in before creating a booking/);
 });
 
+test('manual bookings are sent to the deployed Vercel API', async () => {
+  installBrowserStubs();
+  const { getStaffBookingEndpoint } = await import('../src/lib/api-supabase.js');
+  assert.equal(getStaffBookingEndpoint(), 'https://carwash-bot.vercel.app/api/appointments');
+});
+
 test('onboarding step payloads allow only fields owned by each step', async () => {
   installBrowserStubs();
   const { buildProviderOnboardingStepPayload, buildProviderWorkspacePayload } = await import('../src/lib/api-supabase.js');

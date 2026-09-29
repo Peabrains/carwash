@@ -6,7 +6,10 @@ export const DEFAULT_LOCATION_ID = 'washpoint-main';
 const MOCK_SETTINGS = { min_lead_minutes: 60, max_advance_days: 14, buffer_minutes: 15, weekday_open: '08:00', weekday_close: '19:00', weekend_open: '08:00', weekend_close: '21:00' };
 const TENANT_STORAGE_KEY = 'docket.activeTenant';
 const MOCK_BILLING_STORAGE_KEY = 'docket.mockBilling';
+const STAFF_BOOKING_API_URL = (import.meta.env || {}).VITE_STAFF_BOOKING_API_URL || 'https://carwash-bot.vercel.app/api/appointments';
 let activeTenant = loadTenant();
+
+export function getStaffBookingEndpoint() { return STAFF_BOOKING_API_URL; }
 
 function loadTenant() { try { return JSON.parse(localStorage.getItem(TENANT_STORAGE_KEY)) || { providerId: DEFAULT_PROVIDER_ID, locationId: DEFAULT_LOCATION_ID }; } catch { return { providerId: DEFAULT_PROVIDER_ID, locationId: DEFAULT_LOCATION_ID }; } }
 function ensureSupabase() { if (!supabaseConfigured || !supabase) throw new Error('Supabase is not configured.'); return supabase; }
@@ -322,7 +325,7 @@ export async function getAvailableSlots(dateISO, serviceId, excludeAppointmentId
 export async function createStaffBooking(details) {
   const token = await getSupabaseAccessToken();
   if (!token) throw new Error('Please sign in before creating a booking.');
-  const response = await fetch('/api/appointments', {
+  const response = await fetch(getStaffBookingEndpoint(), {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
     body: JSON.stringify({
