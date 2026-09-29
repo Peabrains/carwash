@@ -105,6 +105,12 @@ test('provider email confirmation returns to provider onboarding', async () => {
   assert.equal(getSupabaseRedirectRoute({ search: '?provider_onboarding=1', authType: 'signup' }), '#/provider/onboarding');
 });
 
+test('manual booking checks the current Supabase session before submitting', async () => {
+  installBrowserStubs();
+  const { createStaffBooking } = await import('../src/lib/api-supabase.js');
+  await assert.rejects(() => createStaffBooking({}), /Please sign in before creating a booking/);
+});
+
 test('onboarding step payloads allow only fields owned by each step', async () => {
   installBrowserStubs();
   const { buildProviderOnboardingStepPayload, buildProviderWorkspacePayload } = await import('../src/lib/api-supabase.js');
